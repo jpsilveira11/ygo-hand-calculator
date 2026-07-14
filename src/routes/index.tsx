@@ -189,31 +189,96 @@ function HypergeometricCalculator() {
     }
   };
 
-  const importFromYdkeUrl = () => {
+  const enrichWithNames = async (cards: ParsedCard[]): Promise<ParsedCard[]> => {
+    const ids = Array.from(new Set(cards.map((c) => c.id).filter((v): v is string => !!v)));
+    if (ids.length === 0) return cards;
     try {
+      const { names } = await resolveCardNames({ data: { ids } });
+      const resolved = cards.map((c) => (c.id && names[c.id] ? { ...c, name: names[c.id] } : c));
+      const unresolved = cards.filter((c) => c.id && !names[c.id]).length;
+      if (unresolved > 0) {
+        toast.warning(`${unresolved} carta(s) sem nome resolvido — mantidas como "Card #ID".`);
+      }
+      return resolved;
+    } catch (e) {
+      console.error(e);
+      toast.warning("Não consegui resolver os nomes das cartas online. Mostrando IDs.");
+      return cards;
+    }
+  };
+
+  const importFromYdkeUrl = async () => {
+    try {
+      setImporting(true);
       const parsed = parseYdkeUrl(ydkeUrl.trim());
-      setParsedCards(parsed.main);
+      const enriched = await enrichWithNames(parsed.main);
+      setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
       toast.success(`Link ydke importado: ${parsed.mainCount} cartas no main deck.`);
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setImporting(false);
     }
   };
 
   const importYdkFile = async (file: File) => {
     try {
+      setImporting(true);
       const text = await file.text();
       const parsed = parseYdk(text);
-      setParsedCards(parsed.main);
+      const enriched = await enrichWithNames(parsed.main);
+      setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
       toast.success(`Arquivo .ydk importado: ${parsed.mainCount} cartas no main deck.`);
     } catch (e) {
       toast.error("Falha ao ler o arquivo .ydk.");
       console.error(e);
+    } finally {
+      setImporting(false);
     }
   };
+
+  const importFromMetaUrl = async () => {
+    const url = metaUrl.trim();
+    if (!url) {
+      toast.error("Informe uma URL de deck do MasterDuelMeta ou DuelLinksMeta.");
+      return;
+    }
+    try {
+      setImporting(true);
+      const deck = await importDeckFromUrl({ data: { url } });
+      const cards: ParsedCard[] = deck.main.map((c) => ({
+        id: c.id,
+        name: c.name,
+        quantity: c.quantity,
+      }));
+      setParsedCards(cards);
+      setCardAssignments({});
+      setDeckSize(deck.mainCount);
+      // Auto-detect format based on source
+      if (deck.source === "masterduelmeta") {
+        setFormatOption("master");
+        applyFormat("master", false);
+      } else {
+        const key: FormatKey = deck.mainCount > 30 ? "rush" : "speed";
+        setFormatOption(key);
+        applyFormat(key, false);
+      }
+      toast.success(
+        `${deck.deckName ?? "Deck"} importado (${deck.mainCount} cartas) de ${
+          deck.source === "masterduelmeta" ? "MasterDuelMeta" : "DuelLinksMeta"
+        }.`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
 
   const clearImport = () => {
     setParsedCards([]);
