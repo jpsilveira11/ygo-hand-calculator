@@ -455,9 +455,6 @@ function HypergeometricCalculator() {
                   <TabsTrigger value="paste" className="flex-1 gap-2 min-w-[110px]">
                     <Copy className="w-4 h-4" /> Colar
                   </TabsTrigger>
-                  <TabsTrigger value="meta" className="flex-1 gap-2 min-w-[110px]">
-                    <LinkIcon className="w-4 h-4" /> Link Meta
-                  </TabsTrigger>
                   <TabsTrigger value="ydke" className="flex-1 gap-2 min-w-[110px]">
                     <Wand2 className="w-4 h-4" /> ydke://
                   </TabsTrigger>
