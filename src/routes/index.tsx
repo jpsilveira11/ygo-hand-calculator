@@ -132,6 +132,28 @@ function HypergeometricCalculator() {
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
   
   const [importing, setImporting] = useState<boolean>(false);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("theme") : null;
+    const initial: "light" | "dark" =
+      stored === "light" || stored === "dark"
+        ? stored
+        : typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    setTheme(initial);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    try {
+      window.localStorage.setItem("theme", theme);
+    } catch {
+      // ignore storage errors
+    }
+  }, [theme]);
 
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
