@@ -467,8 +467,8 @@ function HypergeometricCalculator() {
             <CardHeader>
               <CardTitle className="text-lg">Importar deck</CardTitle>
               <CardDescription>
-                Cole a decklist, informe um link ydke://, envie um .ydk ou puxe direto do
-                MasterDuelMeta / DuelLinksMeta. IDs do Konami são resolvidos em nomes automaticamente.
+                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. IDs do Konami são
+                resolvidos em nomes automaticamente.
               </CardDescription>
             </CardHeader>
             <CardContent>
