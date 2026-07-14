@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Link as LinkIcon } from "lucide-react";
+import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Moon, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,7 @@ import {
   type ParsedCard,
 } from "@/lib/deck-parser";
 import { resolveCardNames } from "@/lib/cards.functions";
-import { importDeckFromUrl } from "@/lib/deck-import.functions";
+
 
 export const Route = createFileRoute("/")({
   component: HypergeometricCalculator,
@@ -67,7 +67,7 @@ const FORMATS: Record<FormatKey, FormatSpec> = {
     defaultSize: 20,
     turn1Hand: 4,
     turn2Hand: 5,
-    categories: ["Skill Enablers", "Starters", "Extenders", "Garnets", "Techs"],
+    categories: ["Starters", "Extenders", "Garnets", "Techs"],
   },
   rush: {
     label: "Rush",
@@ -76,7 +76,7 @@ const FORMATS: Record<FormatKey, FormatSpec> = {
     defaultSize: 30,
     turn1Hand: 5,
     turn2Hand: 5,
-    categories: ["Skill Enablers", "Starters", "Extenders", "Garnets", "Techs"],
+    categories: ["Starters", "Extenders", "Garnets", "Techs"],
   },
 };
 
@@ -130,8 +130,30 @@ function HypergeometricCalculator() {
 
   const [pasteText, setPasteText] = useState<string>("");
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
-  const [metaUrl, setMetaUrl] = useState<string>("");
+  
   const [importing, setImporting] = useState<boolean>(false);
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+
+  useEffect(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("theme") : null;
+    const initial: "light" | "dark" =
+      stored === "light" || stored === "dark"
+        ? stored
+        : typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+    setTheme(initial);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    try {
+      window.localStorage.setItem("theme", theme);
+    } catch {
+      // ignore storage errors
+    }
+  }, [theme]);
 
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
@@ -241,43 +263,6 @@ function HypergeometricCalculator() {
     }
   };
 
-  const importFromMetaUrl = async () => {
-    const url = metaUrl.trim();
-    if (!url) {
-      toast.error("Informe uma URL de deck do MasterDuelMeta ou DuelLinksMeta.");
-      return;
-    }
-    try {
-      setImporting(true);
-      const deck = await importDeckFromUrl({ data: { url } });
-      const cards: ParsedCard[] = deck.main.map((c) => ({
-        id: c.id,
-        name: c.name,
-        quantity: c.quantity,
-      }));
-      setParsedCards(cards);
-      setCardAssignments({});
-      setDeckSize(deck.mainCount);
-      // Auto-detect format based on source
-      if (deck.source === "masterduelmeta") {
-        setFormatOption("master");
-        applyFormat("master", false);
-      } else {
-        const key: FormatKey = deck.mainCount > 30 ? "rush" : "speed";
-        setFormatOption(key);
-        applyFormat(key, false);
-      }
-      toast.success(
-        `${deck.deckName ?? "Deck"} importado (${deck.mainCount} cartas) de ${
-          deck.source === "masterduelmeta" ? "MasterDuelMeta" : "DuelLinksMeta"
-        }.`,
-      );
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setImporting(false);
-    }
-  };
 
 
   const clearImport = () => {
@@ -416,6 +401,15 @@ function HypergeometricCalculator() {
             <Badge variant="secondary">
               Deck {deckSize} · Mão {handSize}
             </Badge>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
           </div>
         </div>
       </header>
@@ -482,8 +476,8 @@ function HypergeometricCalculator() {
             <CardHeader>
               <CardTitle className="text-lg">Importar deck</CardTitle>
               <CardDescription>
-                Cole a decklist, informe um link ydke://, envie um .ydk ou puxe direto do
-                MasterDuelMeta / DuelLinksMeta. IDs do Konami são resolvidos em nomes automaticamente.
+                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. IDs do Konami são
+                resolvidos em nomes automaticamente.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -491,9 +485,6 @@ function HypergeometricCalculator() {
                 <TabsList className="w-full flex-wrap h-auto">
                   <TabsTrigger value="paste" className="flex-1 gap-2 min-w-[110px]">
                     <Copy className="w-4 h-4" /> Colar
-                  </TabsTrigger>
-                  <TabsTrigger value="meta" className="flex-1 gap-2 min-w-[110px]">
-                    <LinkIcon className="w-4 h-4" /> Link Meta
                   </TabsTrigger>
                   <TabsTrigger value="ydke" className="flex-1 gap-2 min-w-[110px]">
                     <Wand2 className="w-4 h-4" /> ydke://
@@ -519,24 +510,6 @@ function HypergeometricCalculator() {
                       <RefreshCw className="w-4 h-4" /> Limpar
                     </Button>
                   </div>
-                </TabsContent>
-
-                <TabsContent value="meta" className="space-y-3 pt-3">
-                  <Input
-                    placeholder="https://www.masterduelmeta.com/deck/... ou https://www.duellinksmeta.com/deck/..."
-                    value={metaUrl}
-                    onChange={(e) => setMetaUrl(e.target.value)}
-                    className="font-mono text-xs"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Cole a URL de qualquer deck listado em MasterDuelMeta (Master) ou DuelLinksMeta
-                    (Speed/Rush). Master Duel e Duel Links <strong>não geram links de deck</strong> —
-                    apenas códigos usados dentro do jogo. Para importar um deck do jogo, procure-o em
-                    um desses sites ou exporte como .ydk.
-                  </p>
-                  <Button onClick={importFromMetaUrl} className="bg-gold gap-2" disabled={importing}>
-                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar do link"}
-                  </Button>
                 </TabsContent>
 
                 <TabsContent value="ydke" className="space-y-3 pt-3">
