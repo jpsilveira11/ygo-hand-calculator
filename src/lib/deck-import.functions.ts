@@ -34,16 +34,18 @@ const UA = "Mozilla/5.0 (LovableApp DeckImporter)";
 
 function normalize(entries: MetaDeckCardEntry[] | undefined): ImportedDeckCard[] {
   if (!Array.isArray(entries)) return [];
-  return entries
-    .map((e) => {
-      const name = e.card?.name?.trim();
-      const qty = Number(e.amount ?? 0);
-      if (!name || !qty) return null;
-      const id = e.card?.konamiID != null ? String(e.card.konamiID) : undefined;
-      return { id, name, quantity: qty } satisfies ImportedDeckCard;
-    })
-    .filter((c): c is ImportedDeckCard => c !== null);
+  const out: ImportedDeckCard[] = [];
+  for (const e of entries) {
+    const name = e.card?.name?.trim();
+    const qty = Number(e.amount ?? 0);
+    if (!name || !qty) continue;
+    const card: ImportedDeckCard = { name, quantity: qty };
+    if (e.card?.konamiID != null) card.id = String(e.card.konamiID);
+    out.push(card);
+  }
+  return out;
 }
+
 
 function sum(cards: ImportedDeckCard[]) {
   return cards.reduce((s, c) => s + c.quantity, 0);
