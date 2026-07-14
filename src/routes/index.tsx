@@ -241,43 +241,6 @@ function HypergeometricCalculator() {
     }
   };
 
-  const importFromMetaUrl = async () => {
-    const url = metaUrl.trim();
-    if (!url) {
-      toast.error("Informe uma URL de deck do MasterDuelMeta ou DuelLinksMeta.");
-      return;
-    }
-    try {
-      setImporting(true);
-      const deck = await importDeckFromUrl({ data: { url } });
-      const cards: ParsedCard[] = deck.main.map((c) => ({
-        id: c.id,
-        name: c.name,
-        quantity: c.quantity,
-      }));
-      setParsedCards(cards);
-      setCardAssignments({});
-      setDeckSize(deck.mainCount);
-      // Auto-detect format based on source
-      if (deck.source === "masterduelmeta") {
-        setFormatOption("master");
-        applyFormat("master", false);
-      } else {
-        const key: FormatKey = deck.mainCount > 30 ? "rush" : "speed";
-        setFormatOption(key);
-        applyFormat(key, false);
-      }
-      toast.success(
-        `${deck.deckName ?? "Deck"} importado (${deck.mainCount} cartas) de ${
-          deck.source === "masterduelmeta" ? "MasterDuelMeta" : "DuelLinksMeta"
-        }.`,
-      );
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setImporting(false);
-    }
-  };
 
 
   const clearImport = () => {
