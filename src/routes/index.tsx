@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText } from "lucide-react";
+import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Link as LinkIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,10 +27,13 @@ import {
   parseYdkeUrl,
   type ParsedCard,
 } from "@/lib/deck-parser";
+import { resolveCardNames } from "@/lib/cards.functions";
+import { importDeckFromUrl } from "@/lib/deck-import.functions";
 
 export const Route = createFileRoute("/")({
   component: HypergeometricCalculator,
 });
+
 
 // -------------------- Format definitions --------------------
 
@@ -127,6 +130,9 @@ function HypergeometricCalculator() {
 
   const [pasteText, setPasteText] = useState<string>("");
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
+  const [metaUrl, setMetaUrl] = useState<string>("");
+  const [importing, setImporting] = useState<boolean>(false);
+
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
   const spec = FORMATS[activeFormatKey];
