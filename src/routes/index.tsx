@@ -401,6 +401,15 @@ function HypergeometricCalculator() {
             <Badge variant="secondary">
               Deck {deckSize} · Mão {handSize}
             </Badge>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
+              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
           </div>
         </div>
       </header>
