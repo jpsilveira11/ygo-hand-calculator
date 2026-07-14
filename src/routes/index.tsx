@@ -481,24 +481,6 @@ function HypergeometricCalculator() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="meta" className="space-y-3 pt-3">
-                  <Input
-                    placeholder="https://www.masterduelmeta.com/deck/... ou https://www.duellinksmeta.com/deck/..."
-                    value={metaUrl}
-                    onChange={(e) => setMetaUrl(e.target.value)}
-                    className="font-mono text-xs"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Cole a URL de qualquer deck listado em MasterDuelMeta (Master) ou DuelLinksMeta
-                    (Speed/Rush). Master Duel e Duel Links <strong>não geram links de deck</strong> —
-                    apenas códigos usados dentro do jogo. Para importar um deck do jogo, procure-o em
-                    um desses sites ou exporte como .ydk.
-                  </p>
-                  <Button onClick={importFromMetaUrl} className="bg-gold gap-2" disabled={importing}>
-                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar do link"}
-                  </Button>
-                </TabsContent>
-
                 <TabsContent value="ydke" className="space-y-3 pt-3">
                   <Input
                     placeholder="ydke://..."
