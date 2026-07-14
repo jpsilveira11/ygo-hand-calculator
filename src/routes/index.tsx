@@ -130,7 +130,7 @@ function HypergeometricCalculator() {
 
   const [pasteText, setPasteText] = useState<string>("");
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
-  const [metaUrl, setMetaUrl] = useState<string>("");
+  
   const [importing, setImporting] = useState<boolean>(false);
 
 
