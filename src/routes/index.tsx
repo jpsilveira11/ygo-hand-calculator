@@ -28,7 +28,7 @@ import {
   type ParsedCard,
 } from "@/lib/deck-parser";
 import { resolveCardNames } from "@/lib/cards.functions";
-import { importDeckFromUrl } from "@/lib/deck-import.functions";
+
 
 export const Route = createFileRoute("/")({
   component: HypergeometricCalculator,
