@@ -76,7 +76,7 @@ const FORMATS: Record<FormatKey, FormatSpec> = {
     defaultSize: 30,
     turn1Hand: 5,
     turn2Hand: 5,
-    categories: ["Skill Enablers", "Starters", "Extenders", "Garnets", "Techs"],
+    categories: ["Starters", "Extenders", "Garnets", "Techs"],
   },
 };
 
