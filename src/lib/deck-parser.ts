@@ -3,7 +3,10 @@
 export interface ParsedCard {
   name: string;
   quantity: number;
+  /** Konami card ID when available (from .ydk / ydke://). */
+  id?: string;
 }
+
 
 export interface ParsedDeck {
   main: ParsedCard[];
@@ -119,7 +122,8 @@ export function parseYdk(text: string): ParsedDeck {
     map.set(line, (map.get(line) ?? 0) + 1);
   }
   const toCards = (m: Map<string, number>): ParsedCard[] =>
-    Array.from(m.entries()).map(([id, q]) => ({ name: `Card #${id}`, quantity: q }));
+    Array.from(m.entries()).map(([id, q]) => ({ id, name: `Card #${id}`, quantity: q }));
+
   const main = toCards(counts.main);
   const extra = toCards(counts.extra);
   const side = toCards(counts.side);
@@ -161,8 +165,9 @@ export function parseYdkeUrl(url: string): ParsedDeck {
   const bucket = (ids: string[]): ParsedCard[] => {
     const m = new Map<string, number>();
     for (const id of ids) m.set(id, (m.get(id) ?? 0) + 1);
-    return Array.from(m.entries()).map(([id, q]) => ({ name: `Card #${id}`, quantity: q }));
+    return Array.from(m.entries()).map(([id, q]) => ({ id, name: `Card #${id}`, quantity: q }));
   };
+
   const main = bucket(decode(mainB64));
   const extra = bucket(decode(extraB64));
   const side = bucket(decode(sideB64));

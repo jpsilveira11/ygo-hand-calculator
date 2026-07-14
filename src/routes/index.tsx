@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText } from "lucide-react";
+import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Link as LinkIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,10 +27,13 @@ import {
   parseYdkeUrl,
   type ParsedCard,
 } from "@/lib/deck-parser";
+import { resolveCardNames } from "@/lib/cards.functions";
+import { importDeckFromUrl } from "@/lib/deck-import.functions";
 
 export const Route = createFileRoute("/")({
   component: HypergeometricCalculator,
 });
+
 
 // -------------------- Format definitions --------------------
 
@@ -127,6 +130,9 @@ function HypergeometricCalculator() {
 
   const [pasteText, setPasteText] = useState<string>("");
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
+  const [metaUrl, setMetaUrl] = useState<string>("");
+  const [importing, setImporting] = useState<boolean>(false);
+
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
   const spec = FORMATS[activeFormatKey];
@@ -183,31 +189,96 @@ function HypergeometricCalculator() {
     }
   };
 
-  const importFromYdkeUrl = () => {
+  const enrichWithNames = async (cards: ParsedCard[]): Promise<ParsedCard[]> => {
+    const ids = Array.from(new Set(cards.map((c) => c.id).filter((v): v is string => !!v)));
+    if (ids.length === 0) return cards;
     try {
+      const { names } = await resolveCardNames({ data: { ids } });
+      const resolved = cards.map((c) => (c.id && names[c.id] ? { ...c, name: names[c.id] } : c));
+      const unresolved = cards.filter((c) => c.id && !names[c.id]).length;
+      if (unresolved > 0) {
+        toast.warning(`${unresolved} carta(s) sem nome resolvido — mantidas como "Card #ID".`);
+      }
+      return resolved;
+    } catch (e) {
+      console.error(e);
+      toast.warning("Não consegui resolver os nomes das cartas online. Mostrando IDs.");
+      return cards;
+    }
+  };
+
+  const importFromYdkeUrl = async () => {
+    try {
+      setImporting(true);
       const parsed = parseYdkeUrl(ydkeUrl.trim());
-      setParsedCards(parsed.main);
+      const enriched = await enrichWithNames(parsed.main);
+      setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
       toast.success(`Link ydke importado: ${parsed.mainCount} cartas no main deck.`);
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setImporting(false);
     }
   };
 
   const importYdkFile = async (file: File) => {
     try {
+      setImporting(true);
       const text = await file.text();
       const parsed = parseYdk(text);
-      setParsedCards(parsed.main);
+      const enriched = await enrichWithNames(parsed.main);
+      setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
       toast.success(`Arquivo .ydk importado: ${parsed.mainCount} cartas no main deck.`);
     } catch (e) {
       toast.error("Falha ao ler o arquivo .ydk.");
       console.error(e);
+    } finally {
+      setImporting(false);
     }
   };
+
+  const importFromMetaUrl = async () => {
+    const url = metaUrl.trim();
+    if (!url) {
+      toast.error("Informe uma URL de deck do MasterDuelMeta ou DuelLinksMeta.");
+      return;
+    }
+    try {
+      setImporting(true);
+      const deck = await importDeckFromUrl({ data: { url } });
+      const cards: ParsedCard[] = deck.main.map((c) => ({
+        id: c.id,
+        name: c.name,
+        quantity: c.quantity,
+      }));
+      setParsedCards(cards);
+      setCardAssignments({});
+      setDeckSize(deck.mainCount);
+      // Auto-detect format based on source
+      if (deck.source === "masterduelmeta") {
+        setFormatOption("master");
+        applyFormat("master", false);
+      } else {
+        const key: FormatKey = deck.mainCount > 30 ? "rush" : "speed";
+        setFormatOption(key);
+        applyFormat(key, false);
+      }
+      toast.success(
+        `${deck.deckName ?? "Deck"} importado (${deck.mainCount} cartas) de ${
+          deck.source === "masterduelmeta" ? "MasterDuelMeta" : "DuelLinksMeta"
+        }.`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
 
   const clearImport = () => {
     setParsedCards([]);
@@ -411,20 +482,23 @@ function HypergeometricCalculator() {
             <CardHeader>
               <CardTitle className="text-lg">Importar deck</CardTitle>
               <CardDescription>
-                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. Se preferir, pule
-                esta etapa e edite manualmente as contagens abaixo.
+                Cole a decklist, informe um link ydke://, envie um .ydk ou puxe direto do
+                MasterDuelMeta / DuelLinksMeta. IDs do Konami são resolvidos em nomes automaticamente.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="paste">
-                <TabsList className="w-full">
-                  <TabsTrigger value="paste" className="flex-1 gap-2">
+                <TabsList className="w-full flex-wrap h-auto">
+                  <TabsTrigger value="paste" className="flex-1 gap-2 min-w-[110px]">
                     <Copy className="w-4 h-4" /> Colar
                   </TabsTrigger>
-                  <TabsTrigger value="ydke" className="flex-1 gap-2">
+                  <TabsTrigger value="meta" className="flex-1 gap-2 min-w-[110px]">
+                    <LinkIcon className="w-4 h-4" /> Link Meta
+                  </TabsTrigger>
+                  <TabsTrigger value="ydke" className="flex-1 gap-2 min-w-[110px]">
                     <Wand2 className="w-4 h-4" /> ydke://
                   </TabsTrigger>
-                  <TabsTrigger value="ydk" className="flex-1 gap-2">
+                  <TabsTrigger value="ydk" className="flex-1 gap-2 min-w-[110px]">
                     <FileText className="w-4 h-4" /> .ydk
                   </TabsTrigger>
                 </TabsList>
@@ -438,13 +512,31 @@ function HypergeometricCalculator() {
                     className="font-mono text-xs"
                   />
                   <div className="flex gap-2 flex-wrap">
-                    <Button onClick={() => importFromText(pasteText)} className="bg-gold gap-2">
+                    <Button onClick={() => importFromText(pasteText)} className="bg-gold gap-2" disabled={importing}>
                       <Upload className="w-4 h-4" /> Importar
                     </Button>
                     <Button variant="ghost" onClick={clearImport} className="gap-2">
                       <RefreshCw className="w-4 h-4" /> Limpar
                     </Button>
                   </div>
+                </TabsContent>
+
+                <TabsContent value="meta" className="space-y-3 pt-3">
+                  <Input
+                    placeholder="https://www.masterduelmeta.com/deck/... ou https://www.duellinksmeta.com/deck/..."
+                    value={metaUrl}
+                    onChange={(e) => setMetaUrl(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Cole a URL de qualquer deck listado em MasterDuelMeta (Master) ou DuelLinksMeta
+                    (Speed/Rush). Master Duel e Duel Links <strong>não geram links de deck</strong> —
+                    apenas códigos usados dentro do jogo. Para importar um deck do jogo, procure-o em
+                    um desses sites ou exporte como .ydk.
+                  </p>
+                  <Button onClick={importFromMetaUrl} className="bg-gold gap-2" disabled={importing}>
+                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar do link"}
+                  </Button>
                 </TabsContent>
 
                 <TabsContent value="ydke" className="space-y-3 pt-3">
@@ -455,11 +547,11 @@ function HypergeometricCalculator() {
                     className="font-mono text-xs"
                   />
                   <p className="text-xs text-muted-foreground">
-                    IDs de cartas aparecerão como "Card #ID"; classifique-os pela contagem já que o
-                    banco de nomes não é resolvido offline.
+                    Os IDs numéricos são resolvidos em nomes via YGOPRODeck. Cartas não encontradas
+                    ficam como "Card #ID".
                   </p>
-                  <Button onClick={importFromYdkeUrl} className="bg-gold gap-2">
-                    <Upload className="w-4 h-4" /> Importar link ydke
+                  <Button onClick={importFromYdkeUrl} className="bg-gold gap-2" disabled={importing}>
+                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar link ydke"}
                   </Button>
                 </TabsContent>
 
@@ -467,14 +559,16 @@ function HypergeometricCalculator() {
                   <Input
                     type="file"
                     accept=".ydk,text/plain"
+                    disabled={importing}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (f) importYdkFile(f);
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Arquivos .ydk contêm apenas IDs numéricos das cartas.
+                    Os IDs do arquivo .ydk são resolvidos em nomes via YGOPRODeck automaticamente.
                   </p>
+
                 </TabsContent>
               </Tabs>
             </CardContent>
