@@ -482,20 +482,23 @@ function HypergeometricCalculator() {
             <CardHeader>
               <CardTitle className="text-lg">Importar deck</CardTitle>
               <CardDescription>
-                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. Se preferir, pule
-                esta etapa e edite manualmente as contagens abaixo.
+                Cole a decklist, informe um link ydke://, envie um .ydk ou puxe direto do
+                MasterDuelMeta / DuelLinksMeta. IDs do Konami são resolvidos em nomes automaticamente.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="paste">
-                <TabsList className="w-full">
-                  <TabsTrigger value="paste" className="flex-1 gap-2">
+                <TabsList className="w-full flex-wrap h-auto">
+                  <TabsTrigger value="paste" className="flex-1 gap-2 min-w-[110px]">
                     <Copy className="w-4 h-4" /> Colar
                   </TabsTrigger>
-                  <TabsTrigger value="ydke" className="flex-1 gap-2">
+                  <TabsTrigger value="meta" className="flex-1 gap-2 min-w-[110px]">
+                    <LinkIcon className="w-4 h-4" /> Link Meta
+                  </TabsTrigger>
+                  <TabsTrigger value="ydke" className="flex-1 gap-2 min-w-[110px]">
                     <Wand2 className="w-4 h-4" /> ydke://
                   </TabsTrigger>
-                  <TabsTrigger value="ydk" className="flex-1 gap-2">
+                  <TabsTrigger value="ydk" className="flex-1 gap-2 min-w-[110px]">
                     <FileText className="w-4 h-4" /> .ydk
                   </TabsTrigger>
                 </TabsList>
@@ -509,13 +512,31 @@ function HypergeometricCalculator() {
                     className="font-mono text-xs"
                   />
                   <div className="flex gap-2 flex-wrap">
-                    <Button onClick={() => importFromText(pasteText)} className="bg-gold gap-2">
+                    <Button onClick={() => importFromText(pasteText)} className="bg-gold gap-2" disabled={importing}>
                       <Upload className="w-4 h-4" /> Importar
                     </Button>
                     <Button variant="ghost" onClick={clearImport} className="gap-2">
                       <RefreshCw className="w-4 h-4" /> Limpar
                     </Button>
                   </div>
+                </TabsContent>
+
+                <TabsContent value="meta" className="space-y-3 pt-3">
+                  <Input
+                    placeholder="https://www.masterduelmeta.com/deck/... ou https://www.duellinksmeta.com/deck/..."
+                    value={metaUrl}
+                    onChange={(e) => setMetaUrl(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Cole a URL de qualquer deck listado em MasterDuelMeta (Master) ou DuelLinksMeta
+                    (Speed/Rush). Master Duel e Duel Links <strong>não geram links de deck</strong> —
+                    apenas códigos usados dentro do jogo. Para importar um deck do jogo, procure-o em
+                    um desses sites ou exporte como .ydk.
+                  </p>
+                  <Button onClick={importFromMetaUrl} className="bg-gold gap-2" disabled={importing}>
+                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar do link"}
+                  </Button>
                 </TabsContent>
 
                 <TabsContent value="ydke" className="space-y-3 pt-3">
@@ -526,11 +547,11 @@ function HypergeometricCalculator() {
                     className="font-mono text-xs"
                   />
                   <p className="text-xs text-muted-foreground">
-                    IDs de cartas aparecerão como "Card #ID"; classifique-os pela contagem já que o
-                    banco de nomes não é resolvido offline.
+                    Os IDs numéricos são resolvidos em nomes via YGOPRODeck. Cartas não encontradas
+                    ficam como "Card #ID".
                   </p>
-                  <Button onClick={importFromYdkeUrl} className="bg-gold gap-2">
-                    <Upload className="w-4 h-4" /> Importar link ydke
+                  <Button onClick={importFromYdkeUrl} className="bg-gold gap-2" disabled={importing}>
+                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar link ydke"}
                   </Button>
                 </TabsContent>
 
@@ -538,14 +559,16 @@ function HypergeometricCalculator() {
                   <Input
                     type="file"
                     accept=".ydk,text/plain"
+                    disabled={importing}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (f) importYdkFile(f);
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Arquivos .ydk contêm apenas IDs numéricos das cartas.
+                    Os IDs do arquivo .ydk são resolvidos em nomes via YGOPRODeck automaticamente.
                   </p>
+
                 </TabsContent>
               </Tabs>
             </CardContent>
