@@ -340,6 +340,8 @@ function HypergeometricCalculator() {
     max: c.include && c.maxEnabled ? c.max : undefined,
   }));
 
+  const maxHandSize = Math.max(spec.turn1Hand, spec.turn2Hand);
+
   const validation = useMemo(() => {
     const errors: string[] = [];
     if (deckSize < spec.min || deckSize > spec.max) {
@@ -357,8 +359,8 @@ function HypergeometricCalculator() {
       if (c.min > size) {
         errors.push(`"${c.name}": mínimo ${c.min} > cartas disponíveis (${size}).`);
       }
-      if (c.min > handSize) {
-        errors.push(`"${c.name}": mínimo ${c.min} > tamanho da mão (${handSize}).`);
+      if (c.min > maxHandSize) {
+        errors.push(`"${c.name}": mínimo ${c.min} > tamanho da mão (${maxHandSize}).`);
       }
       if (c.maxEnabled && c.max < c.min) {
         errors.push(`"${c.name}": máximo (${c.max}) menor que mínimo (${c.min}).`);
@@ -366,15 +368,20 @@ function HypergeometricCalculator() {
     }
     return errors;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories, derivedCounts, deckSize, handSize, spec, hasImportedCards]);
+  }, [categories, derivedCounts, deckSize, maxHandSize, spec, hasImportedCards]);
 
-  const result = useMemo(() => {
+  // Global result per turn
+  const resultsByTurn = useMemo(() => {
     if (validation.length > 0 || included.length === 0) return null;
-    return multivariateProbability(deckSize, handSize, fullConstraints);
+    return hands.map(({ turn, size }) => ({
+      turn,
+      handSize: size,
+      res: multivariateProbability(deckSize, size, fullConstraints),
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validation, deckSize, handSize, categories, derivedCounts, hasImportedCards]);
+  }, [validation, deckSize, categories, derivedCounts, hasImportedCards]);
 
-  // Per-category "at least min" probability (independent computation for each included cat).
+  // Per-category "at least min" probability for each turn
   const perCategoryResults = included.map((c) => {
     const size = effectiveCount(c);
     const constraint: CategoryConstraint = {
@@ -382,12 +389,90 @@ function HypergeometricCalculator() {
       min: c.min,
       max: c.maxEnabled ? c.max : undefined,
     };
-    let res: ReturnType<typeof multivariateProbability> | null = null;
-    if (size >= c.min && c.min <= handSize) {
-      res = multivariateProbability(deckSize, handSize, [constraint]);
-    }
-    return { cat: c, size, res };
+    const byTurn = hands.map(({ turn, size: hs }) => {
+      let res: ReturnType<typeof multivariateProbability> | null = null;
+      if (size >= c.min && c.min <= hs) {
+        res = multivariateProbability(deckSize, hs, [constraint]);
+      }
+      return { turn, handSize: hs, res };
+    });
+    return { cat: c, size, byTurn };
   });
+
+  // Combo results: probability of holding at least `min` of each entry category simultaneously.
+  const comboResults = combos.map((combo) => {
+    const valid = combo.entries.length > 0 && combo.entries.every((e) => {
+      const cat = categories.find((c) => c.id === e.categoryId);
+      return cat && effectiveCount(cat) >= e.min && e.min >= 0;
+    });
+    const byTurn = hands.map(({ turn, size: hs }) => {
+      if (!valid) return { turn, handSize: hs, res: null as ReturnType<typeof multivariateProbability> | null };
+      const totalMin = combo.entries.reduce((s, e) => s + e.min, 0);
+      if (totalMin > hs) return { turn, handSize: hs, res: null };
+      // Build constraints across ALL categories: combo entries use their min, others min:0.
+      const cs: CategoryConstraint[] = categories.map((c) => {
+        const entry = combo.entries.find((e) => e.categoryId === c.id);
+        return {
+          size: effectiveCount(c),
+          min: entry ? entry.min : 0,
+        };
+      });
+      return { turn, handSize: hs, res: multivariateProbability(deckSize, hs, cs) };
+    });
+    return { combo, valid, byTurn };
+  });
+
+  const addCombo = () => {
+    setCombos((prev) => [
+      ...prev,
+      {
+        id: nextComboId(),
+        name: `Combo ${prev.length + 1}`,
+        entries: categories.slice(0, 2).map((c) => ({ categoryId: c.id, min: 1 })),
+      },
+    ]);
+  };
+  const updateCombo = (id: string, patch: Partial<Combo>) =>
+    setCombos((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const removeCombo = (id: string) =>
+    setCombos((prev) => prev.filter((c) => c.id !== id));
+
+  const exportResults = async (kind: "png" | "pdf") => {
+    if (!resultsRef.current) return;
+    try {
+      setExporting(true);
+      const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
+      const dataUrl = await toPng(resultsRef.current, {
+        pixelRatio: 2,
+        backgroundColor: bg,
+        cacheBust: true,
+      });
+      if (kind === "png") {
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `probabilidades-${spec.label.toLowerCase()}.png`;
+        a.click();
+        toast.success("Imagem exportada.");
+      } else {
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((r) => (img.onload = r));
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? "landscape" : "portrait",
+          unit: "px",
+          format: [img.width, img.height],
+        });
+        pdf.addImage(dataUrl, "PNG", 0, 0, img.width, img.height);
+        pdf.save(`probabilidades-${spec.label.toLowerCase()}.pdf`);
+        toast.success("PDF exportado.");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Falha ao exportar os resultados.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // -------------------- Render --------------------
 
