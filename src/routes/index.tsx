@@ -121,11 +121,19 @@ function makeDefaultCategories(format: FormatKey): Category[] {
 
 // -------------------- Component --------------------
 
+interface Combo {
+  id: string;
+  name: string;
+  entries: { categoryId: string; min: number }[];
+}
+let comboIdCounter = 0;
+const nextComboId = () => `combo_${++comboIdCounter}`;
+
 function HypergeometricCalculator() {
   const [formatOption, setFormatOption] = useState<FormatOption>("auto");
   const [deckSize, setDeckSize] = useState<number>(40);
-  const [turn, setTurn] = useState<1 | 2>(1);
   const [categories, setCategories] = useState<Category[]>(() => makeDefaultCategories("master"));
+  const [combos, setCombos] = useState<Combo[]>([]);
 
   const [parsedCards, setParsedCards] = useState<ParsedCard[]>([]);
   const [cardAssignments, setCardAssignments] = useState<Record<number, string>>({});
@@ -134,7 +142,9 @@ function HypergeometricCalculator() {
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
   
   const [importing, setImporting] = useState<boolean>(false);
+  const [exporting, setExporting] = useState<boolean>(false);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const stored = typeof window !== "undefined" ? window.localStorage.getItem("theme") : null;
