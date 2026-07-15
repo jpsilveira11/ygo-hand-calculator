@@ -770,7 +770,7 @@ function HypergeometricCalculator() {
                         <Input
                           type="number"
                           min={0}
-                          max={handSize}
+                          max={maxHandSize}
                           value={c.max}
                           disabled={!c.maxEnabled || !c.include}
                           onChange={(e) =>
