@@ -170,7 +170,10 @@ function HypergeometricCalculator() {
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
   const spec = FORMATS[activeFormatKey];
-  const handSize = turn === 1 ? spec.turn1Hand : spec.turn2Hand;
+  const hands: { turn: 1 | 2; size: number }[] = [
+    { turn: 1, size: spec.turn1Hand },
+    { turn: 2, size: spec.turn2Hand },
+  ];
 
   // ---- Derived category counts from card assignments (if any) ----
   const derivedCounts = useMemo(() => {
