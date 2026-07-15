@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Moon, Sun } from "lucide-react";
+import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Moon, Sun, Image as ImageIcon, FileDown, Zap } from "lucide-react";
+import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
