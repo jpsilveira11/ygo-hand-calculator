@@ -526,7 +526,7 @@ function HypergeometricCalculator() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Formato</Label>
                   <Select value={formatOption} onValueChange={handleFormatChange}>
@@ -550,18 +550,6 @@ function HypergeometricCalculator() {
                     value={deckSize}
                     onChange={(e) => setDeckSize(Math.max(1, Number(e.target.value) || 0))}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Turno</Label>
-                  <Select value={String(turn)} onValueChange={(v) => setTurn(Number(v) as 1 | 2)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Turno 1 ({spec.turn1Hand} cartas)</SelectItem>
-                      <SelectItem value="2">Turno 2 ({spec.turn2Hand} cartas)</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
