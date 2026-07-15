@@ -800,22 +800,130 @@ function HypergeometricCalculator() {
             </CardContent>
           </Card>
 
+          {/* Combos */}
+          <Card className="card-elevated">
+            <CardHeader className="flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-gold" /> Combos personalizados
+                </CardTitle>
+                <CardDescription>
+                  Defina combinações específicas (ex.: 1 starter + 1 extender) e veja a chance destacada.
+                </CardDescription>
+              </div>
+              <Button size="sm" variant="outline" onClick={addCombo} className="gap-1" disabled={categories.length === 0}>
+                <Plus className="w-4 h-4" /> Novo
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {combos.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Nenhum combo criado. Clique em "Novo" para adicionar uma combinação de categorias.
+                </p>
+              )}
+              {combos.map((combo) => (
+                <div key={combo.id} className="p-3 rounded-lg border border-border bg-surface/60 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={combo.name}
+                      onChange={(e) => updateCombo(combo.id, { name: e.target.value })}
+                      className="h-8 font-medium"
+                    />
+                    <Button size="icon" variant="ghost" onClick={() => removeCombo(combo.id)} className="h-8 w-8 shrink-0">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {combo.entries.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Select
+                          value={entry.categoryId}
+                          onValueChange={(v) => {
+                            const entries = [...combo.entries];
+                            entries[i] = { ...entry, categoryId: v };
+                            updateCombo(combo.id, { entries });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 flex-1 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={maxHandSize}
+                          value={entry.min}
+                          onChange={(e) => {
+                            const entries = [...combo.entries];
+                            entries[i] = { ...entry, min: Math.max(0, Number(e.target.value) || 0) };
+                            updateCombo(combo.id, { entries });
+                          }}
+                          className="h-8 w-20"
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => {
+                            const entries = combo.entries.filter((_, j) => j !== i);
+                            updateCombo(combo.id, { entries });
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 h-7"
+                      disabled={categories.length === 0}
+                      onClick={() => {
+                        const first = categories[0];
+                        if (!first) return;
+                        updateCombo(combo.id, {
+                          entries: [...combo.entries, { categoryId: first.id, min: 1 }],
+                        });
+                      }}
+                    >
+                      <Plus className="w-3 h-3" /> Adicionar categoria
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
           {/* Results */}
-          <Card className="card-elevated overflow-hidden">
+          <Card className="card-elevated overflow-hidden" ref={resultsRef}>
             <CardHeader className="gradient-gold">
-              <CardTitle className="text-gold-foreground text-lg">Probabilidade de abertura</CardTitle>
-              <CardDescription className="text-gold-foreground/80">
-                Probabilidade de a mão inicial satisfazer todos os mínimos/máximos das categorias
-                selecionadas.
-              </CardDescription>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <CardTitle className="text-gold-foreground text-lg">Probabilidade de abertura</CardTitle>
+                  <CardDescription className="text-gold-foreground/80">
+                    Formato {spec.label} · Deck {deckSize} · T1 {spec.turn1Hand} / T2 {spec.turn2Hand}
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2" data-export-hide>
+                  <Button size="sm" variant="secondary" onClick={() => exportResults("png")} disabled={exporting} className="gap-1">
+                    <ImageIcon className="w-3.5 h-3.5" /> PNG
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => exportResults("pdf")} disabled={exporting} className="gap-1">
+                    <FileDown className="w-3.5 h-3.5" /> PDF
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
               {validation.length > 0 && (
                 <div className="rounded-md bg-destructive/10 border border-destructive/40 p-3 space-y-1">
                   {validation.map((err, i) => (
-                    <p key={i} className="text-xs text-destructive">
-                      • {err}
-                    </p>
+                    <p key={i} className="text-xs text-destructive">• {err}</p>
                   ))}
                 </div>
               )}
@@ -826,24 +934,68 @@ function HypergeometricCalculator() {
                 </p>
               )}
 
-              {result && (
-                <div className="space-y-3">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-5xl font-bold text-gold font-display">
-                      {(result.probability * 100).toFixed(2)}%
-                    </span>
-                    <span className="text-sm text-muted-foreground">de chance</span>
-                  </div>
-                  <div className="text-xs text-muted-foreground font-mono break-all">
-                    ≈ {formatFraction(result.numerator, result.denominator)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Combinando: {included.map((c) => `≥${c.min} ${c.name}`).join(" · ")}
-                    {included.some((c) => c.maxEnabled)
-                      ? " (com limites máximos aplicados)"
-                      : ""}
-                  </div>
+              {resultsByTurn && (
+                <div className="grid grid-cols-2 gap-3">
+                  {resultsByTurn.map(({ turn, handSize, res }) => (
+                    <div key={turn} className="rounded-lg border border-gold/30 bg-muted/30 p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                          Turno {turn}
+                        </span>
+                        <Badge variant="outline" className="text-xs">{handSize} cartas</Badge>
+                      </div>
+                      <div className="text-3xl sm:text-4xl font-bold text-gold font-display">
+                        {(res.probability * 100).toFixed(2)}%
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono break-all">
+                        ≈ {formatFraction(res.numerator, res.denominator)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              )}
+
+              {resultsByTurn && (
+                <div className="text-xs text-muted-foreground">
+                  Combinando: {included.map((c) => `≥${c.min} ${c.name}`).join(" · ")}
+                  {included.some((c) => c.maxEnabled) ? " (com limites máximos aplicados)" : ""}
+                </div>
+              )}
+
+              {comboResults.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                      Combos personalizados
+                    </p>
+                    {comboResults.map(({ combo, valid, byTurn }) => (
+                      <div key={combo.id} className="p-2 rounded-md bg-gold/10 border border-gold/30 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-sm">{combo.name}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {combo.entries
+                              .map((e) => {
+                                const cat = categories.find((c) => c.id === e.categoryId);
+                                return `≥${e.min} ${cat?.name ?? "?"}`;
+                              })
+                              .join(" + ")}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {byTurn.map(({ turn, res }) => (
+                            <div key={turn} className="flex items-baseline justify-between text-sm">
+                              <span className="text-xs text-muted-foreground">T{turn}</span>
+                              <span className="font-mono text-gold font-bold">
+                                {valid && res ? `${(res.probability * 100).toFixed(2)}%` : "—"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
 
               <Separator />
@@ -855,20 +1007,27 @@ function HypergeometricCalculator() {
                 {perCategoryResults.length === 0 && (
                   <p className="text-xs text-muted-foreground">Nenhuma categoria incluída.</p>
                 )}
-                {perCategoryResults.map(({ cat, size, res }) => (
+                {perCategoryResults.map(({ cat, size, byTurn }) => (
                   <div
                     key={cat.id}
-                    className="flex items-center justify-between text-sm p-2 rounded bg-muted/40"
+                    className="p-2 rounded bg-muted/40 space-y-1"
                   >
-                    <div>
+                    <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{cat.name}</span>
-                      <span className="text-xs text-muted-foreground ml-2">
+                      <span className="text-xs text-muted-foreground">
                         {size} no deck · ≥ {cat.min}
                       </span>
                     </div>
-                    <span className="font-mono text-gold">
-                      {res ? `${(res.probability * 100).toFixed(2)}%` : "—"}
-                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {byTurn.map(({ turn, res }) => (
+                        <div key={turn} className="flex items-baseline justify-between text-xs">
+                          <span className="text-muted-foreground">T{turn}</span>
+                          <span className="font-mono text-gold">
+                            {res ? `${(res.probability * 100).toFixed(2)}%` : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
