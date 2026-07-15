@@ -748,7 +748,7 @@ function HypergeometricCalculator() {
                         <Input
                           type="number"
                           min={0}
-                          max={handSize}
+                          max={maxHandSize}
                           value={c.min}
                           onChange={(e) =>
                             updateCategory(c.id, { min: Math.max(0, Number(e.target.value) || 0) })
