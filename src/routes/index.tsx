@@ -499,7 +499,7 @@ function HypergeometricCalculator() {
           <div className="flex items-center gap-2">
             <Badge className="bg-gold font-medium">{spec.label}</Badge>
             <Badge variant="secondary">
-              Deck {deckSize} · Mão {handSize}
+              Deck {deckSize} · Mão T1 {spec.turn1Hand} · T2 {spec.turn2Hand}
             </Badge>
             <Button
               size="icon"
