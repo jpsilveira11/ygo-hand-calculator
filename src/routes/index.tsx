@@ -1,9 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, Upload, Wand2, Plus, Trash2, RefreshCw, Copy, FileText, Moon, Sun, Image as ImageIcon, FileDown, Zap } from "lucide-react";
+import {
+  Sparkles,
+  Upload,
+  Wand2,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Copy,
+  FileText,
+  Moon,
+  Sun,
+  Image as ImageIcon,
+  FileDown,
+  Zap,
+  Save,
+  FolderOpen,
+  Share2,
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,50 +113,117 @@ const FORMATS: Record<FormatKey, FormatSpec> = {
 
 function detectFormat(deckSize: number): FormatKey {
   if (deckSize <= 30) return "speed";
-  if (deckSize <= 40) {
-    // 30-40 is ambiguous between speed (max 30) and rush (30-40); pick rush for 31+
-    if (deckSize <= 30) return "speed";
-    return "rush";
-  }
+  if (deckSize <= 40) return "rush";
   return "master";
 }
 
-// -------------------- Categories --------------------
+// -------------------- Types --------------------
+
+type Mode = "atLeast" | "exactly" | "atMost";
 
 interface Category {
   id: string;
   name: string;
-  count: number; // number of cards of this category in the deck
-  min: number; // minimum copies desired in opening hand
-  maxEnabled: boolean;
-  max: number;
-  include: boolean; // include in probability calculation
+  count: number; // manual count if no import
+  mode: Mode;
+  value: number;
+  include: boolean;
+}
+
+interface ComboEntry {
+  categoryId: string;
+  mode: Mode;
+  value: number;
+}
+interface Combo {
+  id: string;
+  name: string;
+  entries: ComboEntry[];
+}
+
+interface Preset {
+  name: string;
+  combos: { name: string; entries: { catName: string; mode: Mode; value: number }[] }[];
 }
 
 let catIdCounter = 0;
 const nextCatId = () => `cat_${++catIdCounter}`;
+let comboIdCounter = 0;
+const nextComboId = () => `combo_${++comboIdCounter}`;
 
 function makeDefaultCategories(format: FormatKey): Category[] {
-  return FORMATS[format].categories.map((name) => ({
-    id: nextCatId(),
-    name,
-    count: 0,
-    min: name.toLowerCase().includes("garnet") ? 0 : 1,
-    maxEnabled: name.toLowerCase().includes("garnet"),
-    max: 0,
-    include: !name.toLowerCase().includes("garnet"),
-  }));
+  return FORMATS[format].categories.map((name) => {
+    const isGarnet = name.toLowerCase().includes("garnet");
+    return {
+      id: nextCatId(),
+      name,
+      count: 0,
+      mode: isGarnet ? "atMost" : "atLeast",
+      value: isGarnet ? 0 : 1,
+      include: true,
+    };
+  });
+}
+
+// Turn a Category into a CategoryConstraint for the hypergeometric engine.
+function catToConstraint(c: Category, effectiveSize: number): CategoryConstraint {
+  const size = effectiveSize;
+  if (!c.include) return { size, min: 0 };
+  switch (c.mode) {
+    case "atLeast":
+      return { size, min: c.value };
+    case "exactly":
+      return { size, min: c.value, max: c.value };
+    case "atMost":
+      return { size, min: 0, max: c.value };
+  }
+}
+
+function entryToConstraint(entry: ComboEntry, size: number): CategoryConstraint {
+  switch (entry.mode) {
+    case "atLeast":
+      return { size, min: entry.value };
+    case "exactly":
+      return { size, min: entry.value, max: entry.value };
+    case "atMost":
+      return { size, min: 0, max: entry.value };
+  }
+}
+
+function modeLabel(m: Mode): string {
+  return m === "atLeast" ? "≥" : m === "exactly" ? "=" : "≤";
+}
+
+// -------------------- Share encoding --------------------
+
+interface ShareState {
+  fmt: FormatOption;
+  size: number;
+  cats: { name: string; count: number; mode: Mode; value: number; include: boolean }[];
+  combos: { name: string; entries: { catIdx: number; mode: Mode; value: number }[] }[];
+}
+
+function encodeShare(state: ShareState): string {
+  const json = JSON.stringify(state);
+  const b64 =
+    typeof window === "undefined"
+      ? Buffer.from(json).toString("base64")
+      : btoa(unescape(encodeURIComponent(json)));
+  return b64.replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+function decodeShare(s: string): ShareState | null {
+  try {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+    const json = decodeURIComponent(escape(atob(b64 + pad)));
+    return JSON.parse(json) as ShareState;
+  } catch {
+    return null;
+  }
 }
 
 // -------------------- Component --------------------
-
-interface Combo {
-  id: string;
-  name: string;
-  entries: { categoryId: string; min: number }[];
-}
-let comboIdCounter = 0;
-const nextComboId = () => `combo_${++comboIdCounter}`;
 
 function HypergeometricCalculator() {
   const [formatOption, setFormatOption] = useState<FormatOption>("auto");
@@ -140,33 +236,114 @@ function HypergeometricCalculator() {
 
   const [pasteText, setPasteText] = useState<string>("");
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
-  
+
   const [importing, setImporting] = useState<boolean>(false);
   const [exporting, setExporting] = useState<boolean>(false);
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const resultsRef = useRef<HTMLDivElement>(null);
 
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
+  const [themeUserSet, setThemeUserSet] = useState<boolean>(false);
+
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetName, setPresetName] = useState<string>("");
+
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const shareLoadedRef = useRef<boolean>(false);
+
+  // ---- Theme: follow system by default; user toggle overrides & persists ----
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("theme") : null;
-    const initial: "light" | "dark" =
-      stored === "light" || stored === "dark"
-        ? stored
-        : typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
-    setTheme(initial);
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("theme");
+    if (stored === "light" || stored === "dark") {
+      setTheme(stored);
+      setThemeUserSet(true);
+    } else {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setTheme(prefersDark ? "dark" : "light");
+    }
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const listener = (e: MediaQueryListEvent) => {
+      // Only follow system if user hasn't manually set a preference this session
+      const persisted = window.localStorage.getItem("theme");
+      if (persisted !== "light" && persisted !== "dark") {
+        setTheme(e.matches ? "dark" : "light");
+      }
+    };
+    mql.addEventListener?.("change", listener);
+    return () => mql.removeEventListener?.("change", listener);
   }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.classList.toggle("dark", theme === "dark");
-    try {
-      window.localStorage.setItem("theme", theme);
-    } catch {
-      // ignore storage errors
+    if (themeUserSet) {
+      try {
+        window.localStorage.setItem("theme", theme);
+      } catch {
+        /* ignore */
+      }
     }
-  }, [theme]);
+  }, [theme, themeUserSet]);
 
+  const toggleTheme = () => {
+    setThemeUserSet(true);
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+  };
+
+  // ---- Presets: load once from localStorage ----
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("ygo-combo-presets");
+      if (raw) setPresets(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const persistPresets = (next: Preset[]) => {
+    setPresets(next);
+    try {
+      window.localStorage.setItem("ygo-combo-presets", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // ---- Share link: apply on first mount if hash present ----
+  useEffect(() => {
+    if (shareLoadedRef.current) return;
+    shareLoadedRef.current = true;
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    const match = hash.match(/[#&]s=([^&]+)/);
+    if (!match) return;
+    const state = decodeShare(match[1]);
+    if (!state) return;
+    // Rebuild categories with new IDs; map indices to new IDs for combos.
+    const newCats: Category[] = state.cats.map((c) => ({
+      id: nextCatId(),
+      name: c.name,
+      count: c.count,
+      mode: c.mode,
+      value: c.value,
+      include: c.include,
+    }));
+    const newCombos: Combo[] = state.combos.map((cb) => ({
+      id: nextComboId(),
+      name: cb.name,
+      entries: cb.entries
+        .filter((e) => e.catIdx >= 0 && e.catIdx < newCats.length)
+        .map((e) => ({
+          categoryId: newCats[e.catIdx].id,
+          mode: e.mode,
+          value: e.value,
+        })),
+    }));
+    setFormatOption(state.fmt);
+    setDeckSize(state.size);
+    setCategories(newCats);
+    setCombos(newCombos);
+    toast.success("Configuração carregada do link compartilhado.");
+  }, []);
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
   const spec = FORMATS[activeFormatKey];
@@ -175,25 +352,21 @@ function HypergeometricCalculator() {
     { turn: 2, size: spec.turn2Hand },
   ];
 
-  // ---- Derived category counts from card assignments (if any) ----
   const derivedCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     parsedCards.forEach((card, idx) => {
       const cid = cardAssignments[idx];
-      if (cid && cid !== "__none__") {
-        counts[cid] = (counts[cid] ?? 0) + card.quantity;
-      }
+      if (cid && cid !== "__none__") counts[cid] = (counts[cid] ?? 0) + card.quantity;
     });
     return counts;
   }, [parsedCards, cardAssignments]);
 
   const hasImportedCards = parsedCards.length > 0;
-
-  // Effective count per category: derived from assignments if imported, otherwise the manual count.
   const effectiveCount = (c: Category): number =>
     hasImportedCards ? (derivedCounts[c.id] ?? 0) : c.count;
 
   const totalCategorized = categories.reduce((s, c) => s + effectiveCount(c), 0);
+  const importedTotal = parsedCards.reduce((s, c) => s + c.quantity, 0);
 
   // -------------------- Actions --------------------
 
@@ -202,6 +375,7 @@ function HypergeometricCalculator() {
     if (resetSize) setDeckSize(FORMATS[key].defaultSize);
     setParsedCards([]);
     setCardAssignments({});
+    setCombos([]);
   };
 
   const handleFormatChange = (value: string) => {
@@ -278,8 +452,6 @@ function HypergeometricCalculator() {
     }
   };
 
-
-
   const clearImport = () => {
     setParsedCards([]);
     setCardAssignments({});
@@ -288,65 +460,58 @@ function HypergeometricCalculator() {
     toast.info("Importação limpa.");
   };
 
-  const updateCategory = (id: string, patch: Partial<Category>) => {
+  const updateCategory = (id: string, patch: Partial<Category>) =>
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  };
 
-  const addCategory = () => {
+  const addCategory = () =>
     setCategories((prev) => [
       ...prev,
       {
         id: nextCatId(),
         name: `Categoria ${prev.length + 1}`,
         count: 0,
-        min: 1,
-        maxEnabled: false,
-        max: 0,
+        mode: "atLeast",
+        value: 1,
         include: true,
       },
     ]);
-  };
 
   const removeCategory = (id: string) => {
     setCategories((prev) => prev.filter((c) => c.id !== id));
     setCardAssignments((prev) => {
       const next: Record<number, string> = {};
-      for (const [k, v] of Object.entries(prev)) {
-        if (v !== id) next[Number(k)] = v;
-      }
+      for (const [k, v] of Object.entries(prev)) if (v !== id) next[Number(k)] = v;
       return next;
     });
+    setCombos((prev) =>
+      prev.map((cb) => ({
+        ...cb,
+        entries: cb.entries.filter((e) => e.categoryId !== id),
+      })),
+    );
   };
 
-  // -------------------- Probability calculation --------------------
+  // -------------------- Probability --------------------
 
   const included = categories.filter((c) => c.include);
-  const constraints: CategoryConstraint[] = included.map((c) => ({
-    size: effectiveCount(c),
-    min: c.min,
-    max: c.maxEnabled ? c.max : undefined,
-  }));
-
-  // Also compute effective counts for categories NOT included but that still occupy deck slots.
-  const excludedCategorizedSize = categories
-    .filter((c) => !c.include)
-    .reduce((s, c) => s + effectiveCount(c), 0);
-
-  // For the multivariate model, we pass ALL categorized cards as constraint categories,
-  // with the excluded ones having min:0 and no max — so remaining "other" slots are truly other.
-  const fullConstraints: CategoryConstraint[] = categories.map((c) => ({
-    size: effectiveCount(c),
-    min: c.include ? c.min : 0,
-    max: c.include && c.maxEnabled ? c.max : undefined,
-  }));
-
   const maxHandSize = Math.max(spec.turn1Hand, spec.turn2Hand);
+
+  const fullConstraints: CategoryConstraint[] = categories.map((c) =>
+    catToConstraint(c, effectiveCount(c)),
+  );
 
   const validation = useMemo(() => {
     const errors: string[] = [];
+    const warnings: string[] = [];
+
     if (deckSize < spec.min || deckSize > spec.max) {
-      errors.push(
-        `Deck fora do intervalo do formato ${spec.label} (${spec.min}–${spec.max} cartas).`,
+      warnings.push(
+        `Deck com ${deckSize} cartas está fora da faixa do formato ${spec.label} (${spec.min}–${spec.max}).`,
+      );
+    }
+    if (hasImportedCards && importedTotal !== deckSize) {
+      warnings.push(
+        `Decklist importada tem ${importedTotal} cartas, mas o tamanho do deck está em ${deckSize}.`,
       );
     }
     if (totalCategorized > deckSize) {
@@ -356,86 +521,224 @@ function HypergeometricCalculator() {
     }
     for (const c of included) {
       const size = effectiveCount(c);
-      if (c.min > size) {
-        errors.push(`"${c.name}": mínimo ${c.min} > cartas disponíveis (${size}).`);
+      if (c.mode !== "atMost" && c.value > size) {
+        errors.push(`"${c.name}": ${modeLabel(c.mode)} ${c.value} > cartas disponíveis (${size}).`);
       }
-      if (c.min > maxHandSize) {
-        errors.push(`"${c.name}": mínimo ${c.min} > tamanho da mão (${maxHandSize}).`);
-      }
-      if (c.maxEnabled && c.max < c.min) {
-        errors.push(`"${c.name}": máximo (${c.max}) menor que mínimo (${c.min}).`);
+      if (c.value > maxHandSize) {
+        errors.push(`"${c.name}": ${modeLabel(c.mode)} ${c.value} > tamanho da mão (${maxHandSize}).`);
       }
     }
-    return errors;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categories, derivedCounts, deckSize, maxHandSize, spec, hasImportedCards]);
+    return { errors, warnings };
+  }, [
+    categories,
+    derivedCounts,
+    deckSize,
+    maxHandSize,
+    spec,
+    hasImportedCards,
+    importedTotal,
+    totalCategorized,
+    included,
+  ]);
 
-  // Global result per turn
+  const canCompute = validation.errors.length === 0 && included.length > 0;
+
   const resultsByTurn = useMemo(() => {
-    if (validation.length > 0 || included.length === 0) return null;
+    if (!canCompute) return null;
     return hands.map(({ turn, size }) => ({
       turn,
       handSize: size,
       res: multivariateProbability(deckSize, size, fullConstraints),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validation, deckSize, categories, derivedCounts, hasImportedCards]);
+  }, [canCompute, deckSize, categories, derivedCounts]);
 
-  // Per-category "at least min" probability for each turn
   const perCategoryResults = included.map((c) => {
     const size = effectiveCount(c);
-    const constraint: CategoryConstraint = {
-      size,
-      min: c.min,
-      max: c.maxEnabled ? c.max : undefined,
-    };
+    const constraint = catToConstraint(c, size);
     const byTurn = hands.map(({ turn, size: hs }) => {
       let res: ReturnType<typeof multivariateProbability> | null = null;
-      if (size >= c.min && c.min <= hs) {
-        res = multivariateProbability(deckSize, hs, [constraint]);
-      }
+      const feasible =
+        (c.mode === "atMost" || c.value <= size) && c.value <= hs;
+      if (feasible) res = multivariateProbability(deckSize, hs, [constraint]);
       return { turn, handSize: hs, res };
     });
     return { cat: c, size, byTurn };
   });
 
-  // Combo results: probability of holding at least `min` of each entry category simultaneously.
   const comboResults = combos.map((combo) => {
-    const valid = combo.entries.length > 0 && combo.entries.every((e) => {
-      const cat = categories.find((c) => c.id === e.categoryId);
-      return cat && effectiveCount(cat) >= e.min && e.min >= 0;
-    });
+    const valid =
+      combo.entries.length > 0 &&
+      combo.entries.every((e) => {
+        const cat = categories.find((c) => c.id === e.categoryId);
+        if (!cat) return false;
+        const size = effectiveCount(cat);
+        if (e.value < 0) return false;
+        if (e.mode !== "atMost" && e.value > size) return false;
+        return true;
+      });
     const byTurn = hands.map(({ turn, size: hs }) => {
-      if (!valid) return { turn, handSize: hs, res: null as ReturnType<typeof multivariateProbability> | null };
-      const totalMin = combo.entries.reduce((s, e) => s + e.min, 0);
-      if (totalMin > hs) return { turn, handSize: hs, res: null };
-      // Build constraints across ALL categories: combo entries use their min, others min:0.
-      const cs: CategoryConstraint[] = categories.map((c) => {
-        const entry = combo.entries.find((e) => e.categoryId === c.id);
-        return {
-          size: effectiveCount(c),
-          min: entry ? entry.min : 0,
-        };
+      if (!valid)
+        return { turn, handSize: hs, res: null as ReturnType<typeof multivariateProbability> | null };
+      // Minimum forced picks (atLeast/exactly) sum
+      const forcedMin = combo.entries.reduce(
+        (s, e) => s + (e.mode === "atMost" ? 0 : e.value),
+        0,
+      );
+      if (forcedMin > hs) return { turn, handSize: hs, res: null };
+      // Build constraints per category; combined entries override defaults.
+      const cs: CategoryConstraint[] = categories.map((cat) => {
+        const size = effectiveCount(cat);
+        const entry = combo.entries.find((e) => e.categoryId === cat.id);
+        if (entry) return entryToConstraint(entry, size);
+        return { size, min: 0 };
       });
       return { turn, handSize: hs, res: multivariateProbability(deckSize, hs, cs) };
     });
     return { combo, valid, byTurn };
   });
 
-  const addCombo = () => {
+  const addCombo = () =>
     setCombos((prev) => [
       ...prev,
       {
         id: nextComboId(),
         name: `Combo ${prev.length + 1}`,
-        entries: categories.slice(0, 2).map((c) => ({ categoryId: c.id, min: 1 })),
+        entries: categories.slice(0, 2).map((c) => ({
+          categoryId: c.id,
+          mode: "atLeast" as Mode,
+          value: 1,
+        })),
       },
     ]);
-  };
   const updateCombo = (id: string, patch: Partial<Combo>) =>
     setCombos((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  const removeCombo = (id: string) =>
-    setCombos((prev) => prev.filter((c) => c.id !== id));
+  const removeCombo = (id: string) => setCombos((prev) => prev.filter((c) => c.id !== id));
+
+  // -------------------- Chart data --------------------
+
+  const chartData = useMemo(() => {
+    const rows: { label: string; T1: number; T2: number; kind: string }[] = [];
+    for (const p of perCategoryResults) {
+      rows.push({
+        label: p.cat.name,
+        kind: "Categoria",
+        T1: p.byTurn[0].res ? +(p.byTurn[0].res.probability * 100).toFixed(2) : 0,
+        T2: p.byTurn[1].res ? +(p.byTurn[1].res.probability * 100).toFixed(2) : 0,
+      });
+    }
+    for (const cr of comboResults) {
+      rows.push({
+        label: cr.combo.name,
+        kind: "Combo",
+        T1: cr.valid && cr.byTurn[0].res ? +(cr.byTurn[0].res.probability * 100).toFixed(2) : 0,
+        T2: cr.valid && cr.byTurn[1].res ? +(cr.byTurn[1].res.probability * 100).toFixed(2) : 0,
+      });
+    }
+    return rows;
+  }, [perCategoryResults, comboResults]);
+
+  // -------------------- Presets --------------------
+
+  const savePreset = () => {
+    const name = presetName.trim();
+    if (!name) {
+      toast.error("Dê um nome ao preset.");
+      return;
+    }
+    if (combos.length === 0) {
+      toast.error("Crie ao menos um combo antes de salvar.");
+      return;
+    }
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    const p: Preset = {
+      name,
+      combos: combos.map((cb) => ({
+        name: cb.name,
+        entries: cb.entries.map((e) => ({
+          catName: catById.get(e.categoryId)?.name ?? "?",
+          mode: e.mode,
+          value: e.value,
+        })),
+      })),
+    };
+    const filtered = presets.filter((x) => x.name !== name);
+    persistPresets([...filtered, p]);
+    toast.success(`Preset "${name}" salvo.`);
+  };
+
+  const loadPreset = (name: string) => {
+    const p = presets.find((x) => x.name === name);
+    if (!p) return;
+    const byName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
+    const loaded: Combo[] = p.combos.map((cb) => ({
+      id: nextComboId(),
+      name: cb.name,
+      entries: cb.entries
+        .map((e) => {
+          const cat = byName.get(e.catName.toLowerCase());
+          if (!cat) return null;
+          return { categoryId: cat.id, mode: e.mode, value: e.value };
+        })
+        .filter((v): v is ComboEntry => v !== null),
+    }));
+    setCombos(loaded);
+    const missing = p.combos.reduce(
+      (s, cb) => s + cb.entries.filter((e) => !byName.has(e.catName.toLowerCase())).length,
+      0,
+    );
+    if (missing > 0) {
+      toast.warning(`Preset "${name}" carregado; ${missing} entrada(s) ignorada(s) (categoria ausente).`);
+    } else {
+      toast.success(`Preset "${name}" carregado.`);
+    }
+  };
+
+  const deletePreset = (name: string) => {
+    persistPresets(presets.filter((x) => x.name !== name));
+    toast.info(`Preset "${name}" removido.`);
+  };
+
+  // -------------------- Share --------------------
+
+  const buildShareLink = (): string => {
+    const state: ShareState = {
+      fmt: formatOption,
+      size: deckSize,
+      cats: categories.map((c) => ({
+        name: c.name,
+        count: effectiveCount(c),
+        mode: c.mode,
+        value: c.value,
+        include: c.include,
+      })),
+      combos: combos.map((cb) => ({
+        name: cb.name,
+        entries: cb.entries.map((e) => ({
+          catIdx: categories.findIndex((c) => c.id === e.categoryId),
+          mode: e.mode,
+          value: e.value,
+        })),
+      })),
+    };
+    const enc = encodeShare(state);
+    const base = `${window.location.origin}${window.location.pathname}`;
+    return `${base}#s=${enc}`;
+  };
+
+  const copyShareLink = async () => {
+    try {
+      const url = buildShareLink();
+      await navigator.clipboard.writeText(url);
+      window.history.replaceState(null, "", url);
+      toast.success("Link copiado para a área de transferência.");
+    } catch (e) {
+      console.error(e);
+      toast.error("Não consegui copiar o link.");
+    }
+  };
+
+  // -------------------- Export --------------------
 
   const exportResults = async (kind: "png" | "pdf") => {
     if (!resultsRef.current) return;
@@ -496,15 +799,18 @@ function HypergeometricCalculator() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge className="bg-gold font-medium">{spec.label}</Badge>
             <Badge variant="secondary">
               Deck {deckSize} · Mão T1 {spec.turn1Hand} · T2 {spec.turn2Hand}
             </Badge>
+            <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title="Copiar link com as configurações atuais">
+              <Share2 className="w-4 h-4" /> Compartilhar
+            </Button>
             <Button
               size="icon"
               variant="outline"
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              onClick={toggleTheme}
               aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
               title={theme === "dark" ? "Tema claro" : "Tema escuro"}
             >
@@ -515,9 +821,8 @@ function HypergeometricCalculator() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6">
-        {/* LEFT: Configuration + Import */}
+        {/* LEFT: Configuration + Import + Validation */}
         <div className="space-y-6">
-          {/* Format + deck size */}
           <Card className="card-elevated">
             <CardHeader>
               <CardTitle className="text-lg">Formato e configuração</CardTitle>
@@ -556,6 +861,81 @@ function HypergeometricCalculator() {
                 Faixa do formato: <span className="text-gold font-medium">{spec.min}–{spec.max}</span>{" "}
                 cartas · Categorias sugeridas: {spec.categories.join(", ")}
               </p>
+            </CardContent>
+          </Card>
+
+          {/* Validation */}
+          <Card className="card-elevated">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                {validation.errors.length === 0 && validation.warnings.length === 0 ? (
+                  <CheckCircle2 className="w-4 h-4 text-gold" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-destructive" />
+                )}
+                Validação do deck
+              </CardTitle>
+              <CardDescription>
+                Contagens totais e verificação de consistência com o formato selecionado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="p-2 rounded bg-muted/40">
+                  <div className="text-muted-foreground">Tamanho</div>
+                  <div className="font-mono text-sm font-bold">{deckSize}</div>
+                </div>
+                <div className="p-2 rounded bg-muted/40">
+                  <div className="text-muted-foreground">Categorizado</div>
+                  <div className="font-mono text-sm font-bold">{totalCategorized}</div>
+                </div>
+                <div className="p-2 rounded bg-muted/40">
+                  <div className="text-muted-foreground">Importado</div>
+                  <div className="font-mono text-sm font-bold">
+                    {hasImportedCards ? importedTotal : "—"}
+                  </div>
+                </div>
+                <div className="p-2 rounded bg-muted/40">
+                  <div className="text-muted-foreground">Faixa {spec.label}</div>
+                  <div className="font-mono text-sm font-bold">{spec.min}–{spec.max}</div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                {categories.map((c) => {
+                  const size = effectiveCount(c);
+                  return (
+                    <div key={c.id} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-2 h-2 rounded-full"
+                          style={{ background: c.include ? "var(--gold)" : "var(--muted-foreground)" }}
+                        />
+                        {c.name}
+                      </span>
+                      <span className="font-mono">{size}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {validation.errors.length > 0 && (
+                <div className="rounded-md bg-destructive/10 border border-destructive/40 p-2 space-y-1">
+                  {validation.errors.map((err, i) => (
+                    <p key={i} className="text-xs text-destructive">• {err}</p>
+                  ))}
+                </div>
+              )}
+              {validation.warnings.length > 0 && (
+                <div className="rounded-md bg-gold/10 border border-gold/40 p-2 space-y-1">
+                  {validation.warnings.map((w, i) => (
+                    <p key={i} className="text-xs text-gold">• {w}</p>
+                  ))}
+                </div>
+              )}
+              {validation.errors.length === 0 && validation.warnings.length === 0 && (
+                <p className="text-xs text-muted-foreground">Tudo consistente com o formato {spec.label}.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -629,13 +1009,11 @@ function HypergeometricCalculator() {
                   <p className="text-xs text-muted-foreground">
                     Os IDs do arquivo .ydk são resolvidos em nomes via YGOPRODeck automaticamente.
                   </p>
-
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
 
-          {/* Parsed card list */}
           {hasImportedCards && (
             <Card className="card-elevated">
               <CardHeader className="flex-row items-center justify-between">
@@ -686,14 +1064,14 @@ function HypergeometricCalculator() {
           )}
         </div>
 
-        {/* RIGHT: Categories + Results */}
+        {/* RIGHT: Categories + Combos + Results */}
         <div className="space-y-6">
           <Card className="card-elevated">
             <CardHeader className="flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg">Categorias</CardTitle>
                 <CardDescription>
-                  Renomeie, ajuste contagens e defina mínimos/máximos para a mão inicial.
+                  Escolha um modo (≥, =, ≤) para cada categoria e defina o valor alvo.
                 </CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCategory} className="gap-1">
@@ -744,39 +1122,34 @@ function HypergeometricCalculator() {
                         />
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Mín. na mão</Label>
+                        <Label className="text-xs text-muted-foreground">Modo</Label>
+                        <Select
+                          value={c.mode}
+                          onValueChange={(v) => updateCategory(c.id, { mode: v as Mode })}
+                          disabled={!c.include}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="atLeast">≥ ao menos</SelectItem>
+                            <SelectItem value="exactly">= exatamente</SelectItem>
+                            <SelectItem value="atMost">≤ no máximo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Valor</Label>
                         <Input
                           type="number"
                           min={0}
                           max={maxHandSize}
-                          value={c.min}
+                          value={c.value}
                           onChange={(e) =>
-                            updateCategory(c.id, { min: Math.max(0, Number(e.target.value) || 0) })
+                            updateCategory(c.id, { value: Math.max(0, Number(e.target.value) || 0) })
                           }
                           className="h-8"
                           disabled={!c.include}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Switch
-                            checked={c.maxEnabled}
-                            onCheckedChange={(v) => updateCategory(c.id, { maxEnabled: v })}
-                            className="scale-75"
-                            disabled={!c.include}
-                          />
-                          Máx.
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={maxHandSize}
-                          value={c.max}
-                          disabled={!c.maxEnabled || !c.include}
-                          onChange={(e) =>
-                            updateCategory(c.id, { max: Math.max(0, Number(e.target.value) || 0) })
-                          }
-                          className="h-8"
                         />
                       </div>
                     </div>
@@ -791,12 +1164,6 @@ function HypergeometricCalculator() {
                   {totalCategorized} / {deckSize}
                 </span>
               </div>
-              {excludedCategorizedSize > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {excludedCategorizedSize} carta(s) em categorias não incluídas no cálculo continuam
-                  ocupando espaço no deck.
-                </p>
-              )}
             </CardContent>
           </Card>
 
@@ -808,7 +1175,7 @@ function HypergeometricCalculator() {
                   <Zap className="w-4 h-4 text-gold" /> Combos personalizados
                 </CardTitle>
                 <CardDescription>
-                  Defina combinações específicas (ex.: 1 starter + 1 extender) e veja a chance destacada.
+                  Combine categorias com modos (≥ ao menos, = exatamente, ≤ no máximo).
                 </CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCombo} className="gap-1" disabled={categories.length === 0}>
@@ -816,6 +1183,55 @@ function HypergeometricCalculator() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Preset controls */}
+              <div className="p-2 rounded-lg border border-dashed border-border bg-muted/30 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    placeholder="Nome do preset"
+                    value={presetName}
+                    onChange={(e) => setPresetName(e.target.value)}
+                    className="h-8 flex-1 min-w-[140px] text-sm"
+                  />
+                  <Button size="sm" variant="outline" onClick={savePreset} className="gap-1">
+                    <Save className="w-3.5 h-3.5" /> Salvar
+                  </Button>
+                  <Select onValueChange={loadPreset}>
+                    <SelectTrigger className="h-8 w-[160px] text-xs">
+                      <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                      <SelectValue placeholder="Carregar preset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {presets.length === 0 && (
+                        <div className="px-2 py-1 text-xs text-muted-foreground">Nenhum preset salvo</div>
+                      )}
+                      {presets.map((p) => (
+                        <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {presets.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {presets.map((p) => (
+                      <Badge
+                        key={p.name}
+                        variant="secondary"
+                        className="text-[10px] gap-1 pr-1"
+                      >
+                        {p.name}
+                        <button
+                          className="hover:text-destructive"
+                          onClick={() => deletePreset(p.name)}
+                          aria-label={`Remover ${p.name}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {combos.length === 0 && (
                 <p className="text-xs text-muted-foreground">
                   Nenhum combo criado. Clique em "Novo" para adicionar uma combinação de categorias.
@@ -835,7 +1251,7 @@ function HypergeometricCalculator() {
                   </div>
                   <div className="space-y-1.5">
                     {combo.entries.map((entry, i) => (
-                      <div key={i} className="flex items-center gap-2">
+                      <div key={i} className="flex items-center gap-1.5">
                         <Select
                           value={entry.categoryId}
                           onValueChange={(v) => {
@@ -853,17 +1269,34 @@ function HypergeometricCalculator() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <Select
+                          value={entry.mode}
+                          onValueChange={(v) => {
+                            const entries = [...combo.entries];
+                            entries[i] = { ...entry, mode: v as Mode };
+                            updateCombo(combo.id, { entries });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-[70px] text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="atLeast">≥</SelectItem>
+                            <SelectItem value="exactly">=</SelectItem>
+                            <SelectItem value="atMost">≤</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Input
                           type="number"
                           min={0}
                           max={maxHandSize}
-                          value={entry.min}
+                          value={entry.value}
                           onChange={(e) => {
                             const entries = [...combo.entries];
-                            entries[i] = { ...entry, min: Math.max(0, Number(e.target.value) || 0) };
+                            entries[i] = { ...entry, value: Math.max(0, Number(e.target.value) || 0) };
                             updateCombo(combo.id, { entries });
                           }}
-                          className="h-8 w-20"
+                          className="h-8 w-16"
                         />
                         <Button
                           size="icon"
@@ -887,7 +1320,7 @@ function HypergeometricCalculator() {
                         const first = categories[0];
                         if (!first) return;
                         updateCombo(combo.id, {
-                          entries: [...combo.entries, { categoryId: first.id, min: 1 }],
+                          entries: [...combo.entries, { categoryId: first.id, mode: "atLeast", value: 1 }],
                         });
                       }}
                     >
@@ -920,9 +1353,9 @@ function HypergeometricCalculator() {
               </div>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
-              {validation.length > 0 && (
+              {validation.errors.length > 0 && (
                 <div className="rounded-md bg-destructive/10 border border-destructive/40 p-3 space-y-1">
-                  {validation.map((err, i) => (
+                  {validation.errors.map((err, i) => (
                     <p key={i} className="text-xs text-destructive">• {err}</p>
                   ))}
                 </div>
@@ -957,8 +1390,48 @@ function HypergeometricCalculator() {
 
               {resultsByTurn && (
                 <div className="text-xs text-muted-foreground">
-                  Combinando: {included.map((c) => `≥${c.min} ${c.name}`).join(" · ")}
-                  {included.some((c) => c.maxEnabled) ? " (com limites máximos aplicados)" : ""}
+                  Combinando: {included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ")}
+                </div>
+              )}
+
+              {/* Chart T1 vs T2 */}
+              {chartData.length > 0 && (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                    Comparativo T1 vs T2 (%)
+                  </p>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 40 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                          angle={-25}
+                          textAnchor="end"
+                          interval={0}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                          domain={[0, 100]}
+                          unit="%"
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "var(--popover)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: "var(--popover-foreground)",
+                          }}
+                          formatter={(v: number) => `${v}%`}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="T1" fill="var(--gold)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="T2" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               )}
 
@@ -977,7 +1450,7 @@ function HypergeometricCalculator() {
                             {combo.entries
                               .map((e) => {
                                 const cat = categories.find((c) => c.id === e.categoryId);
-                                return `≥${e.min} ${cat?.name ?? "?"}`;
+                                return `${modeLabel(e.mode)}${e.value} ${cat?.name ?? "?"}`;
                               })
                               .join(" + ")}
                           </span>
@@ -1002,7 +1475,7 @@ function HypergeometricCalculator() {
 
               <div className="space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Por categoria (≥ mínimo)
+                  Por categoria
                 </p>
                 {perCategoryResults.length === 0 && (
                   <p className="text-xs text-muted-foreground">Nenhuma categoria incluída.</p>
@@ -1015,7 +1488,7 @@ function HypergeometricCalculator() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{cat.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {size} no deck · ≥ {cat.min}
+                        {size} no deck · {modeLabel(cat.mode)} {cat.value}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
