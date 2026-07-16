@@ -978,33 +978,32 @@ function HypergeometricCalculator() {
                 ) : (
                   <AlertTriangle className="w-4 h-4 text-destructive" />
                 )}
-                Validação do deck
+                {t("validation_title")}
               </CardTitle>
-              <CardDescription>
-                Contagens totais e verificação de consistência com o formato selecionado.
-              </CardDescription>
+              <CardDescription>{t("validation_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Tamanho</div>
+                  <div className="text-muted-foreground">{t("size")}</div>
                   <div className="font-mono text-sm font-bold">{deckSize}</div>
                 </div>
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Categorizado</div>
+                  <div className="text-muted-foreground">{t("categorized")}</div>
                   <div className="font-mono text-sm font-bold">{totalCategorized}</div>
                 </div>
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Importado</div>
+                  <div className="text-muted-foreground">{t("imported")}</div>
                   <div className="font-mono text-sm font-bold">
                     {hasImportedCards ? importedTotal : "—"}
                   </div>
                 </div>
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Faixa {spec.label}</div>
+                  <div className="text-muted-foreground">{t("range", { label: spec.label })}</div>
                   <div className="font-mono text-sm font-bold">{spec.min}–{spec.max}</div>
                 </div>
               </div>
+
 
               <div className="space-y-1">
                 {categories.map((c) => {
