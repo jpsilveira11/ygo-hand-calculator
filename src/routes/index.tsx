@@ -727,15 +727,50 @@ function HypergeometricCalculator() {
       0,
     );
     if (missing > 0) {
-      toast.warning(`Preset "${name}" carregado; ${missing} entrada(s) ignorada(s) (categoria ausente).`);
+      toast.warning(t("preset_loaded_missing", { name, n: missing }));
     } else {
-      toast.success(`Preset "${name}" carregado.`);
+      toast.success(t("preset_loaded", { name }));
     }
   };
 
   const deletePreset = (name: string) => {
     persistPresets(presets.filter((x) => x.name !== name));
-    toast.info(`Preset "${name}" removido.`);
+    toast.info(t("preset_removed", { name }));
+  };
+
+  const exportPresetsJson = () => {
+    try {
+      const blob = new Blob([JSON.stringify(presets, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ygo-combo-presets.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("presets_exported"));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("presets_invalid"));
+    }
+  };
+
+  const importPresetsJson = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) throw new Error("bad shape");
+      const valid: Preset[] = parsed.filter(
+        (p) => p && typeof p.name === "string" && Array.isArray(p.combos),
+      );
+      if (valid.length === 0) throw new Error("empty");
+      const byName = new Map(presets.map((p) => [p.name, p]));
+      for (const p of valid) byName.set(p.name, p);
+      persistPresets(Array.from(byName.values()));
+      toast.success(t("presets_imported", { n: valid.length }));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("presets_invalid"));
+    }
   };
 
   // -------------------- Share --------------------
