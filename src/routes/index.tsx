@@ -299,7 +299,7 @@ function HypergeometricCalculator() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   };
 
-  // ---- Presets: load once from localStorage ----
+  // ---- Presets + language: load once from localStorage ----
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem("ygo-combo-presets");
@@ -307,7 +307,21 @@ function HypergeometricCalculator() {
     } catch {
       /* ignore */
     }
+    try {
+      const l = window.localStorage.getItem("lang");
+      if (l === "pt" || l === "en" || l === "es") setLang(l);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("lang", lang);
+    } catch {
+      /* ignore */
+    }
+  }, [lang]);
 
   const persistPresets = (next: Preset[]) => {
     setPresets(next);
