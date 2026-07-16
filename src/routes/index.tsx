@@ -944,7 +944,7 @@ function HypergeometricCalculator() {
             <CardHeader>
               <CardTitle className="text-lg">Importar deck</CardTitle>
               <CardDescription>
-                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. IDs do Konami são
+                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. IDs das cartas são
                 resolvidos em nomes automaticamente.
               </CardDescription>
             </CardHeader>
