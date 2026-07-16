@@ -831,7 +831,7 @@ function HypergeometricCalculator() {
         a.href = dataUrl;
         a.download = `probabilidades-${spec.label.toLowerCase()}.png`;
         a.click();
-        toast.success("Imagem exportada.");
+        toast.success(t("export_png_ok"));
       } else {
         const img = new Image();
         img.src = dataUrl;
@@ -843,11 +843,11 @@ function HypergeometricCalculator() {
         });
         pdf.addImage(dataUrl, "PNG", 0, 0, img.width, img.height);
         pdf.save(`probabilidades-${spec.label.toLowerCase()}.pdf`);
-        toast.success("PDF exportado.");
+        toast.success(t("export_pdf_ok"));
       }
     } catch (e) {
       console.error(e);
-      toast.error("Falha ao exportar os resultados.");
+      toast.error(t("export_fail"));
     } finally {
       setExporting(false);
     }
