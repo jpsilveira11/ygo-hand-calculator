@@ -881,33 +881,47 @@ function HypergeometricCalculator() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gold leading-tight">
-                Calculadora Hipergeométrica
+                {t("app_title")}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Yu-Gi-Oh — Master · Speed · Rush
-              </p>
+              <p className="text-sm text-muted-foreground">{t("app_subtitle")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge className="bg-gold font-medium">{spec.label}</Badge>
             <Badge variant="secondary">
-              Deck {deckSize} · Mão T1 {spec.turn1Hand} · T2 {spec.turn2Hand}
+              {t("deck_badge", { size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
             </Badge>
-            <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title="Copiar link com as configurações atuais">
-              <Share2 className="w-4 h-4" /> Compartilhar
+            <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title={t("share_title")}>
+              <Share2 className="w-4 h-4" /> {t("share")}
             </Button>
+            <Select value={lang} onValueChange={(v) => setLang(v as Lang)}>
+              <SelectTrigger className="w-[140px] h-9" aria-label={t("language")}>
+                <div className="flex items-center gap-2">
+                  <LanguagesIcon className="w-4 h-4" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {LANGS.map((l) => (
+                  <SelectItem key={l.code} value={l.code}>
+                    <span className="mr-2">{l.flag}</span>{l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               size="icon"
               variant="outline"
               onClick={toggleTheme}
-              aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
-              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+              aria-label={theme === "dark" ? t("theme_light") : t("theme_dark")}
+              title={theme === "dark" ? t("theme_light") : t("theme_dark")}
             >
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
           </div>
         </div>
       </header>
+
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6">
         {/* LEFT: Configuration + Import + Validation */}
