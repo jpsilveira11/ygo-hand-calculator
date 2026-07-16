@@ -20,6 +20,9 @@ import {
   Share2,
   AlertTriangle,
   CheckCircle2,
+  Languages as LanguagesIcon,
+  Download,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
@@ -59,6 +62,7 @@ import {
   type ParsedCard,
 } from "@/lib/deck-parser";
 import { resolveCardNames } from "@/lib/cards.functions";
+import { makeT, LANGS, type Lang } from "@/lib/i18n";
 
 
 export const Route = createFileRoute("/")({
@@ -83,7 +87,7 @@ interface FormatSpec {
 
 const FORMATS: Record<FormatKey, FormatSpec> = {
   master: {
-    label: "Master",
+    label: "Avançado/Genesys",
     min: 40,
     max: 60,
     defaultSize: 40,
@@ -201,6 +205,8 @@ interface ShareState {
   size: number;
   cats: { name: string; count: number; mode: Mode; value: number; include: boolean }[];
   combos: { name: string; entries: { catIdx: number; mode: Mode; value: number }[] }[];
+  presets?: Preset[];
+  lang?: Lang;
 }
 
 function encodeShare(state: ShareState): string {
@@ -246,8 +252,12 @@ function HypergeometricCalculator() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState<string>("");
 
+  const [lang, setLang] = useState<Lang>("pt");
+  const t = useMemo(() => makeT(lang), [lang]);
+
   const resultsRef = useRef<HTMLDivElement>(null);
   const shareLoadedRef = useRef<boolean>(false);
+  const presetFileRef = useRef<HTMLInputElement>(null);
 
   // ---- Theme: follow system by default; user toggle overrides & persists ----
   useEffect(() => {
@@ -289,7 +299,7 @@ function HypergeometricCalculator() {
     setTheme((t) => (t === "dark" ? "light" : "dark"));
   };
 
-  // ---- Presets: load once from localStorage ----
+  // ---- Presets + language: load once from localStorage ----
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem("ygo-combo-presets");
@@ -297,7 +307,21 @@ function HypergeometricCalculator() {
     } catch {
       /* ignore */
     }
+    try {
+      const l = window.localStorage.getItem("lang");
+      if (l === "pt" || l === "en" || l === "es") setLang(l);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("lang", lang);
+    } catch {
+      /* ignore */
+    }
+  }, [lang]);
 
   const persistPresets = (next: Preset[]) => {
     setPresets(next);
@@ -342,7 +366,22 @@ function HypergeometricCalculator() {
     setDeckSize(state.size);
     setCategories(newCats);
     setCombos(newCombos);
-    toast.success("Configuração carregada do link compartilhado.");
+    if (state.lang === "pt" || state.lang === "en" || state.lang === "es") setLang(state.lang);
+    if (Array.isArray(state.presets) && state.presets.length > 0) {
+      // Merge shared presets into existing (shared takes precedence on name conflicts)
+      setPresets((prev) => {
+        const byName = new Map(prev.map((p) => [p.name, p]));
+        for (const p of state.presets!) byName.set(p.name, p);
+        const merged = Array.from(byName.values());
+        try {
+          window.localStorage.setItem("ygo-combo-presets", JSON.stringify(merged));
+        } catch {
+          /* ignore */
+        }
+        return merged;
+      });
+    }
+    toast.success(makeT(state.lang ?? lang)("share_loaded"));
   }, []);
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
@@ -618,13 +657,24 @@ function HypergeometricCalculator() {
   // -------------------- Chart data --------------------
 
   const chartData = useMemo(() => {
-    const rows: { label: string; T1: number; T2: number; kind: string }[] = [];
+    const rows: {
+      label: string;
+      T1: number;
+      T2: number;
+      kind: string;
+      T1frac: string;
+      T2frac: string;
+    }[] = [];
+    const fracOrDash = (r: { numerator: bigint; denominator: bigint } | null) =>
+      r ? formatFraction(r.numerator, r.denominator) : "—";
     for (const p of perCategoryResults) {
       rows.push({
         label: p.cat.name,
-        kind: "Categoria",
+        kind: t("categorized"),
         T1: p.byTurn[0].res ? +(p.byTurn[0].res.probability * 100).toFixed(2) : 0,
         T2: p.byTurn[1].res ? +(p.byTurn[1].res.probability * 100).toFixed(2) : 0,
+        T1frac: fracOrDash(p.byTurn[0].res),
+        T2frac: fracOrDash(p.byTurn[1].res),
       });
     }
     for (const cr of comboResults) {
@@ -633,21 +683,23 @@ function HypergeometricCalculator() {
         kind: "Combo",
         T1: cr.valid && cr.byTurn[0].res ? +(cr.byTurn[0].res.probability * 100).toFixed(2) : 0,
         T2: cr.valid && cr.byTurn[1].res ? +(cr.byTurn[1].res.probability * 100).toFixed(2) : 0,
+        T1frac: cr.valid ? fracOrDash(cr.byTurn[0].res) : "—",
+        T2frac: cr.valid ? fracOrDash(cr.byTurn[1].res) : "—",
       });
     }
     return rows;
-  }, [perCategoryResults, comboResults]);
+  }, [perCategoryResults, comboResults, t]);
 
   // -------------------- Presets --------------------
 
   const savePreset = () => {
     const name = presetName.trim();
     if (!name) {
-      toast.error("Dê um nome ao preset.");
+      toast.error(t("preset_needs_name"));
       return;
     }
     if (combos.length === 0) {
-      toast.error("Crie ao menos um combo antes de salvar.");
+      toast.error(t("preset_needs_combo"));
       return;
     }
     const catById = new Map(categories.map((c) => [c.id, c]));
@@ -664,7 +716,7 @@ function HypergeometricCalculator() {
     };
     const filtered = presets.filter((x) => x.name !== name);
     persistPresets([...filtered, p]);
-    toast.success(`Preset "${name}" salvo.`);
+    toast.success(t("preset_saved", { name }));
   };
 
   const loadPreset = (name: string) => {
@@ -688,15 +740,50 @@ function HypergeometricCalculator() {
       0,
     );
     if (missing > 0) {
-      toast.warning(`Preset "${name}" carregado; ${missing} entrada(s) ignorada(s) (categoria ausente).`);
+      toast.warning(t("preset_loaded_missing", { name, n: missing }));
     } else {
-      toast.success(`Preset "${name}" carregado.`);
+      toast.success(t("preset_loaded", { name }));
     }
   };
 
   const deletePreset = (name: string) => {
     persistPresets(presets.filter((x) => x.name !== name));
-    toast.info(`Preset "${name}" removido.`);
+    toast.info(t("preset_removed", { name }));
+  };
+
+  const exportPresetsJson = () => {
+    try {
+      const blob = new Blob([JSON.stringify(presets, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ygo-combo-presets.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("presets_exported"));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("presets_invalid"));
+    }
+  };
+
+  const importPresetsJson = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) throw new Error("bad shape");
+      const valid: Preset[] = parsed.filter(
+        (p) => p && typeof p.name === "string" && Array.isArray(p.combos),
+      );
+      if (valid.length === 0) throw new Error("empty");
+      const byName = new Map(presets.map((p) => [p.name, p]));
+      for (const p of valid) byName.set(p.name, p);
+      persistPresets(Array.from(byName.values()));
+      toast.success(t("presets_imported", { n: valid.length }));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("presets_invalid"));
+    }
   };
 
   // -------------------- Share --------------------
@@ -720,6 +807,8 @@ function HypergeometricCalculator() {
           value: e.value,
         })),
       })),
+      presets,
+      lang,
     };
     const enc = encodeShare(state);
     const base = `${window.location.origin}${window.location.pathname}`;
@@ -731,10 +820,10 @@ function HypergeometricCalculator() {
       const url = buildShareLink();
       await navigator.clipboard.writeText(url);
       window.history.replaceState(null, "", url);
-      toast.success("Link copiado para a área de transferência.");
+      toast.success(t("share_copied"));
     } catch (e) {
       console.error(e);
-      toast.error("Não consegui copiar o link.");
+      toast.error(t("share_fail"));
     }
   };
 
@@ -755,7 +844,7 @@ function HypergeometricCalculator() {
         a.href = dataUrl;
         a.download = `probabilidades-${spec.label.toLowerCase()}.png`;
         a.click();
-        toast.success("Imagem exportada.");
+        toast.success(t("export_png_ok"));
       } else {
         const img = new Image();
         img.src = dataUrl;
@@ -767,11 +856,11 @@ function HypergeometricCalculator() {
         });
         pdf.addImage(dataUrl, "PNG", 0, 0, img.width, img.height);
         pdf.save(`probabilidades-${spec.label.toLowerCase()}.pdf`);
-        toast.success("PDF exportado.");
+        toast.success(t("export_pdf_ok"));
       }
     } catch (e) {
       console.error(e);
-      toast.error("Falha ao exportar os resultados.");
+      toast.error(t("export_fail"));
     } finally {
       setExporting(false);
     }
@@ -792,27 +881,40 @@ function HypergeometricCalculator() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gold leading-tight">
-                Calculadora Hipergeométrica
+                {t("app_title")}
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Yu-Gi-Oh — Master · Speed · Rush
-              </p>
+              <p className="text-sm text-muted-foreground">{t("app_subtitle")}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Badge className="bg-gold font-medium">{spec.label}</Badge>
             <Badge variant="secondary">
-              Deck {deckSize} · Mão T1 {spec.turn1Hand} · T2 {spec.turn2Hand}
+              {t("deck_badge", { size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
             </Badge>
-            <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title="Copiar link com as configurações atuais">
-              <Share2 className="w-4 h-4" /> Compartilhar
+            <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title={t("share_title")}>
+              <Share2 className="w-4 h-4" /> {t("share")}
             </Button>
+            <Select value={lang} onValueChange={(v) => setLang(v as Lang)}>
+              <SelectTrigger className="w-[140px] h-9" aria-label={t("language")}>
+                <div className="flex items-center gap-2">
+                  <LanguagesIcon className="w-4 h-4" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {LANGS.map((l) => (
+                  <SelectItem key={l.code} value={l.code}>
+                    <span className="mr-2">{l.flag}</span>{l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               size="icon"
               variant="outline"
               onClick={toggleTheme}
-              aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"}
-              title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+              aria-label={theme === "dark" ? t("theme_light") : t("theme_dark")}
+              title={theme === "dark" ? t("theme_light") : t("theme_dark")}
             >
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
@@ -820,34 +922,33 @@ function HypergeometricCalculator() {
         </div>
       </header>
 
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6">
         {/* LEFT: Configuration + Import + Validation */}
         <div className="space-y-6">
           <Card className="card-elevated">
             <CardHeader>
-              <CardTitle className="text-lg">Formato e configuração</CardTitle>
-              <CardDescription>
-                Escolha o formato ou deixe em automático para detectar pelo tamanho do deck.
-              </CardDescription>
+              <CardTitle className="text-lg">{t("format_card_title")}</CardTitle>
+              <CardDescription>{t("format_card_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Formato</Label>
+                  <Label>{t("format_label")}</Label>
                   <Select value={formatOption} onValueChange={handleFormatChange}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">Automático</SelectItem>
-                      <SelectItem value="master">Master (40–60)</SelectItem>
-                      <SelectItem value="speed">Speed (20–30)</SelectItem>
-                      <SelectItem value="rush">Rush (30–40)</SelectItem>
+                      <SelectItem value="auto">{t("auto")}</SelectItem>
+                      <SelectItem value="master">{t("fmt_master")}</SelectItem>
+                      <SelectItem value="speed">{t("fmt_speed")}</SelectItem>
+                      <SelectItem value="rush">{t("fmt_rush")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Tamanho do deck</Label>
+                  <Label>{t("deck_size")}</Label>
                   <Input
                     type="number"
                     min={1}
@@ -858,11 +959,15 @@ function HypergeometricCalculator() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Faixa do formato: <span className="text-gold font-medium">{spec.min}–{spec.max}</span>{" "}
-                cartas · Categorias sugeridas: {spec.categories.join(", ")}
+                {t("format_range_hint", {
+                  min: spec.min,
+                  max: spec.max,
+                  cats: spec.categories.join(", "),
+                })}
               </p>
             </CardContent>
           </Card>
+
 
           {/* Validation */}
           <Card className="card-elevated">
@@ -873,33 +978,32 @@ function HypergeometricCalculator() {
                 ) : (
                   <AlertTriangle className="w-4 h-4 text-destructive" />
                 )}
-                Validação do deck
+                {t("validation_title")}
               </CardTitle>
-              <CardDescription>
-                Contagens totais e verificação de consistência com o formato selecionado.
-              </CardDescription>
+              <CardDescription>{t("validation_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Tamanho</div>
+                  <div className="text-muted-foreground">{t("size")}</div>
                   <div className="font-mono text-sm font-bold">{deckSize}</div>
                 </div>
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Categorizado</div>
+                  <div className="text-muted-foreground">{t("categorized")}</div>
                   <div className="font-mono text-sm font-bold">{totalCategorized}</div>
                 </div>
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Importado</div>
+                  <div className="text-muted-foreground">{t("imported")}</div>
                   <div className="font-mono text-sm font-bold">
                     {hasImportedCards ? importedTotal : "—"}
                   </div>
                 </div>
                 <div className="p-2 rounded bg-muted/40">
-                  <div className="text-muted-foreground">Faixa {spec.label}</div>
+                  <div className="text-muted-foreground">{t("range", { label: spec.label })}</div>
                   <div className="font-mono text-sm font-bold">{spec.min}–{spec.max}</div>
                 </div>
               </div>
+
 
               <div className="space-y-1">
                 {categories.map((c) => {
@@ -934,7 +1038,7 @@ function HypergeometricCalculator() {
                 </div>
               )}
               {validation.errors.length === 0 && validation.warnings.length === 0 && (
-                <p className="text-xs text-muted-foreground">Tudo consistente com o formato {spec.label}.</p>
+                <p className="text-xs text-muted-foreground">{t("all_consistent", { label: spec.label })}</p>
               )}
             </CardContent>
           </Card>
@@ -942,23 +1046,20 @@ function HypergeometricCalculator() {
           {/* Import */}
           <Card className="card-elevated">
             <CardHeader>
-              <CardTitle className="text-lg">Importar deck</CardTitle>
-              <CardDescription>
-                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. IDs das cartas são
-                resolvidos em nomes automaticamente.
-              </CardDescription>
+              <CardTitle className="text-lg">{t("import_title")}</CardTitle>
+              <CardDescription>{t("import_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="paste">
                 <TabsList className="w-full flex-wrap h-auto">
                   <TabsTrigger value="paste" className="flex-1 gap-2 min-w-[110px]">
-                    <Copy className="w-4 h-4" /> Colar
+                    <Copy className="w-4 h-4" /> {t("tab_paste")}
                   </TabsTrigger>
                   <TabsTrigger value="ydke" className="flex-1 gap-2 min-w-[110px]">
-                    <Wand2 className="w-4 h-4" /> ydke://
+                    <Wand2 className="w-4 h-4" /> {t("tab_ydke")}
                   </TabsTrigger>
                   <TabsTrigger value="ydk" className="flex-1 gap-2 min-w-[110px]">
-                    <FileText className="w-4 h-4" /> .ydk
+                    <FileText className="w-4 h-4" /> {t("tab_ydk")}
                   </TabsTrigger>
                 </TabsList>
 
@@ -972,10 +1073,10 @@ function HypergeometricCalculator() {
                   />
                   <div className="flex gap-2 flex-wrap">
                     <Button onClick={() => importFromText(pasteText)} className="bg-gold gap-2" disabled={importing}>
-                      <Upload className="w-4 h-4" /> Importar
+                      <Upload className="w-4 h-4" /> {t("import_btn")}
                     </Button>
                     <Button variant="ghost" onClick={clearImport} className="gap-2">
-                      <RefreshCw className="w-4 h-4" /> Limpar
+                      <RefreshCw className="w-4 h-4" /> {t("clear")}
                     </Button>
                   </div>
                 </TabsContent>
@@ -987,13 +1088,15 @@ function HypergeometricCalculator() {
                     onChange={(e) => setYdkeUrl(e.target.value)}
                     className="font-mono text-xs"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Os IDs numéricos são resolvidos em nomes via YGOPRODeck. Cartas não encontradas
-                    ficam como "Card #ID".
-                  </p>
-                  <Button onClick={importFromYdkeUrl} className="bg-gold gap-2" disabled={importing}>
-                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar link ydke"}
-                  </Button>
+                  <p className="text-xs text-muted-foreground">{t("ydke_hint")}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button onClick={importFromYdkeUrl} className="bg-gold gap-2" disabled={importing}>
+                      <Upload className="w-4 h-4" /> {importing ? t("importing") : t("import_ydke_btn")}
+                    </Button>
+                    <Button variant="ghost" onClick={clearImport} className="gap-2">
+                      <RefreshCw className="w-4 h-4" /> {t("clear")}
+                    </Button>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="ydk" className="space-y-3 pt-3">
@@ -1006,9 +1109,12 @@ function HypergeometricCalculator() {
                       if (f) importYdkFile(f);
                     }}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Os IDs do arquivo .ydk são resolvidos em nomes via YGOPRODeck automaticamente.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("ydk_hint")}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="ghost" onClick={clearImport} className="gap-2">
+                      <RefreshCw className="w-4 h-4" /> {t("clear")}
+                    </Button>
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -1018,12 +1124,11 @@ function HypergeometricCalculator() {
             <Card className="card-elevated">
               <CardHeader className="flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">Cartas do main deck</CardTitle>
-                  <CardDescription>
-                    Atribua cada carta a uma categoria — as contagens são somadas automaticamente.
-                  </CardDescription>
+                  <CardTitle className="text-lg">{t("main_cards")}</CardTitle>
+                  <CardDescription>{t("main_cards_desc")}</CardDescription>
                 </div>
-                <Badge variant="secondary">{parsedCards.length} entradas</Badge>
+                <Badge variant="secondary">{parsedCards.length} {t("entries")}</Badge>
+
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[320px] pr-3">
@@ -1179,7 +1284,7 @@ function HypergeometricCalculator() {
                 </CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCombo} className="gap-1" disabled={categories.length === 0}>
-                <Plus className="w-4 h-4" /> Novo
+                <Plus className="w-4 h-4" /> {t("new_m")}
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1187,28 +1292,58 @@ function HypergeometricCalculator() {
               <div className="p-2 rounded-lg border border-dashed border-border bg-muted/30 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Input
-                    placeholder="Nome do preset"
+                    placeholder={t("preset_name_ph")}
                     value={presetName}
                     onChange={(e) => setPresetName(e.target.value)}
                     className="h-8 flex-1 min-w-[140px] text-sm"
                   />
                   <Button size="sm" variant="outline" onClick={savePreset} className="gap-1">
-                    <Save className="w-3.5 h-3.5" /> Salvar
+                    <Save className="w-3.5 h-3.5" /> {t("save")}
                   </Button>
                   <Select onValueChange={loadPreset}>
                     <SelectTrigger className="h-8 w-[160px] text-xs">
                       <FolderOpen className="w-3.5 h-3.5 mr-1" />
-                      <SelectValue placeholder="Carregar preset" />
+                      <SelectValue placeholder={t("load_preset")} />
                     </SelectTrigger>
                     <SelectContent>
                       {presets.length === 0 && (
-                        <div className="px-2 py-1 text-xs text-muted-foreground">Nenhum preset salvo</div>
+                        <div className="px-2 py-1 text-xs text-muted-foreground">{t("no_presets")}</div>
                       )}
                       {presets.map((p) => (
                         <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={exportPresetsJson}
+                    className="gap-1 h-8"
+                    disabled={presets.length === 0}
+                  >
+                    <Download className="w-3.5 h-3.5" /> {t("export_presets")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => presetFileRef.current?.click()}
+                    className="gap-1 h-8"
+                  >
+                    <UploadIcon className="w-3.5 h-3.5" /> {t("import_presets")}
+                  </Button>
+                  <input
+                    ref={presetFileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) importPresetsJson(f);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
                 </div>
                 {presets.length > 0 && (
                   <div className="flex flex-wrap gap-1">
@@ -1233,9 +1368,7 @@ function HypergeometricCalculator() {
               </div>
 
               {combos.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Nenhum combo criado. Clique em "Novo" para adicionar uma combinação de categorias.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("no_combos")}</p>
               )}
               {combos.map((combo) => (
                 <div key={combo.id} className="p-3 rounded-lg border border-border bg-surface/60 space-y-2">
@@ -1417,6 +1550,7 @@ function HypergeometricCalculator() {
                           unit="%"
                         />
                         <Tooltip
+                          cursor={{ fill: "var(--muted)", opacity: 0.15 }}
                           contentStyle={{
                             background: "var(--popover)",
                             border: "1px solid var(--border)",
@@ -1424,7 +1558,47 @@ function HypergeometricCalculator() {
                             fontSize: 12,
                             color: "var(--popover-foreground)",
                           }}
-                          formatter={(v: number) => `${v}%`}
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const row = payload[0].payload as {
+                              label: string;
+                              kind: string;
+                              T1: number;
+                              T2: number;
+                              T1frac: string;
+                              T2frac: string;
+                            };
+                            return (
+                              <div
+                                style={{
+                                  background: "var(--popover)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                  color: "var(--popover-foreground)",
+                                  padding: "8px 10px",
+                                  minWidth: 180,
+                                }}
+                              >
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
+                                <div style={{ opacity: 0.7, marginBottom: 6 }}>{row.kind}</div>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                                  <span style={{ color: "var(--gold)" }}>T1</span>
+                                  <span>
+                                    <strong>{row.T1}%</strong>{" "}
+                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T1frac}</span>
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                                  <span style={{ color: "var(--accent)" }}>T2</span>
+                                  <span>
+                                    <strong>{row.T2}%</strong>{" "}
+                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T2frac}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          }}
                         />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
                         <Bar dataKey="T1" fill="var(--gold)" radius={[4, 4, 0, 0]} />
