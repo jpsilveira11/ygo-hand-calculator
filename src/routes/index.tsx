@@ -1284,7 +1284,7 @@ function HypergeometricCalculator() {
                 </CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCombo} className="gap-1" disabled={categories.length === 0}>
-                <Plus className="w-4 h-4" /> Novo
+                <Plus className="w-4 h-4" /> {t("new_m")}
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1292,28 +1292,58 @@ function HypergeometricCalculator() {
               <div className="p-2 rounded-lg border border-dashed border-border bg-muted/30 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Input
-                    placeholder="Nome do preset"
+                    placeholder={t("preset_name_ph")}
                     value={presetName}
                     onChange={(e) => setPresetName(e.target.value)}
                     className="h-8 flex-1 min-w-[140px] text-sm"
                   />
                   <Button size="sm" variant="outline" onClick={savePreset} className="gap-1">
-                    <Save className="w-3.5 h-3.5" /> Salvar
+                    <Save className="w-3.5 h-3.5" /> {t("save")}
                   </Button>
                   <Select onValueChange={loadPreset}>
                     <SelectTrigger className="h-8 w-[160px] text-xs">
                       <FolderOpen className="w-3.5 h-3.5 mr-1" />
-                      <SelectValue placeholder="Carregar preset" />
+                      <SelectValue placeholder={t("load_preset")} />
                     </SelectTrigger>
                     <SelectContent>
                       {presets.length === 0 && (
-                        <div className="px-2 py-1 text-xs text-muted-foreground">Nenhum preset salvo</div>
+                        <div className="px-2 py-1 text-xs text-muted-foreground">{t("no_presets")}</div>
                       )}
                       {presets.map((p) => (
                         <SelectItem key={p.name} value={p.name}>{p.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={exportPresetsJson}
+                    className="gap-1 h-8"
+                    disabled={presets.length === 0}
+                  >
+                    <Download className="w-3.5 h-3.5" /> {t("export_presets")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => presetFileRef.current?.click()}
+                    className="gap-1 h-8"
+                  >
+                    <UploadIcon className="w-3.5 h-3.5" /> {t("import_presets")}
+                  </Button>
+                  <input
+                    ref={presetFileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) importPresetsJson(f);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
                 </div>
                 {presets.length > 0 && (
                   <div className="flex flex-wrap gap-1">
@@ -1338,9 +1368,7 @@ function HypergeometricCalculator() {
               </div>
 
               {combos.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Nenhum combo criado. Clique em "Novo" para adicionar uma combinação de categorias.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("no_combos")}</p>
               )}
               {combos.map((combo) => (
                 <div key={combo.id} className="p-3 rounded-lg border border-border bg-surface/60 space-y-2">
