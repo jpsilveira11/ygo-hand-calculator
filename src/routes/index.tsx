@@ -657,13 +657,24 @@ function HypergeometricCalculator() {
   // -------------------- Chart data --------------------
 
   const chartData = useMemo(() => {
-    const rows: { label: string; T1: number; T2: number; kind: string }[] = [];
+    const rows: {
+      label: string;
+      T1: number;
+      T2: number;
+      kind: string;
+      T1frac: string;
+      T2frac: string;
+    }[] = [];
+    const fracOrDash = (r: { numerator: bigint; denominator: bigint } | null) =>
+      r ? formatFraction(r.numerator, r.denominator) : "—";
     for (const p of perCategoryResults) {
       rows.push({
         label: p.cat.name,
-        kind: "Categoria",
+        kind: t("categorized"),
         T1: p.byTurn[0].res ? +(p.byTurn[0].res.probability * 100).toFixed(2) : 0,
         T2: p.byTurn[1].res ? +(p.byTurn[1].res.probability * 100).toFixed(2) : 0,
+        T1frac: fracOrDash(p.byTurn[0].res),
+        T2frac: fracOrDash(p.byTurn[1].res),
       });
     }
     for (const cr of comboResults) {
@@ -672,10 +683,12 @@ function HypergeometricCalculator() {
         kind: "Combo",
         T1: cr.valid && cr.byTurn[0].res ? +(cr.byTurn[0].res.probability * 100).toFixed(2) : 0,
         T2: cr.valid && cr.byTurn[1].res ? +(cr.byTurn[1].res.probability * 100).toFixed(2) : 0,
+        T1frac: cr.valid ? fracOrDash(cr.byTurn[0].res) : "—",
+        T2frac: cr.valid ? fracOrDash(cr.byTurn[1].res) : "—",
       });
     }
     return rows;
-  }, [perCategoryResults, comboResults]);
+  }, [perCategoryResults, comboResults, t]);
 
   // -------------------- Presets --------------------
 
