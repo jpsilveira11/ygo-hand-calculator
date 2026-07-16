@@ -695,11 +695,11 @@ function HypergeometricCalculator() {
   const savePreset = () => {
     const name = presetName.trim();
     if (!name) {
-      toast.error("Dê um nome ao preset.");
+      toast.error(t("preset_needs_name"));
       return;
     }
     if (combos.length === 0) {
-      toast.error("Crie ao menos um combo antes de salvar.");
+      toast.error(t("preset_needs_combo"));
       return;
     }
     const catById = new Map(categories.map((c) => [c.id, c]));
@@ -716,7 +716,7 @@ function HypergeometricCalculator() {
     };
     const filtered = presets.filter((x) => x.name !== name);
     persistPresets([...filtered, p]);
-    toast.success(`Preset "${name}" salvo.`);
+    toast.success(t("preset_saved", { name }));
   };
 
   const loadPreset = (name: string) => {
