@@ -20,6 +20,9 @@ import {
   Share2,
   AlertTriangle,
   CheckCircle2,
+  Languages as LanguagesIcon,
+  Download,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
