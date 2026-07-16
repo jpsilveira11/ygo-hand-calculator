@@ -1038,7 +1038,7 @@ function HypergeometricCalculator() {
                 </div>
               )}
               {validation.errors.length === 0 && validation.warnings.length === 0 && (
-                <p className="text-xs text-muted-foreground">Tudo consistente com o formato {spec.label}.</p>
+                <p className="text-xs text-muted-foreground">{t("all_consistent", { label: spec.label })}</p>
               )}
             </CardContent>
           </Card>
