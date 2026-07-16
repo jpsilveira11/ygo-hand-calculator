@@ -87,7 +87,7 @@ interface FormatSpec {
 
 const FORMATS: Record<FormatKey, FormatSpec> = {
   master: {
-    label: "Master",
+    label: "Avançado/Genesys",
     min: 40,
     max: 60,
     defaultSize: 40,
