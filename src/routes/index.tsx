@@ -928,29 +928,27 @@ function HypergeometricCalculator() {
         <div className="space-y-6">
           <Card className="card-elevated">
             <CardHeader>
-              <CardTitle className="text-lg">Formato e configuração</CardTitle>
-              <CardDescription>
-                Escolha o formato ou deixe em automático para detectar pelo tamanho do deck.
-              </CardDescription>
+              <CardTitle className="text-lg">{t("format_card_title")}</CardTitle>
+              <CardDescription>{t("format_card_desc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Formato</Label>
+                  <Label>{t("format_label")}</Label>
                   <Select value={formatOption} onValueChange={handleFormatChange}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="auto">Automático</SelectItem>
-                      <SelectItem value="master">Master (40–60)</SelectItem>
-                      <SelectItem value="speed">Speed (20–30)</SelectItem>
-                      <SelectItem value="rush">Rush (30–40)</SelectItem>
+                      <SelectItem value="auto">{t("auto")}</SelectItem>
+                      <SelectItem value="master">{t("fmt_master")}</SelectItem>
+                      <SelectItem value="speed">{t("fmt_speed")}</SelectItem>
+                      <SelectItem value="rush">{t("fmt_rush")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Tamanho do deck</Label>
+                  <Label>{t("deck_size")}</Label>
                   <Input
                     type="number"
                     min={1}
@@ -961,11 +959,15 @@ function HypergeometricCalculator() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Faixa do formato: <span className="text-gold font-medium">{spec.min}–{spec.max}</span>{" "}
-                cartas · Categorias sugeridas: {spec.categories.join(", ")}
+                {t("format_range_hint", {
+                  min: spec.min,
+                  max: spec.max,
+                  cats: spec.categories.join(", "),
+                })}
               </p>
             </CardContent>
           </Card>
+
 
           {/* Validation */}
           <Card className="card-elevated">
