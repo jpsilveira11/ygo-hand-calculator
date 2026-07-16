@@ -205,6 +205,8 @@ interface ShareState {
   size: number;
   cats: { name: string; count: number; mode: Mode; value: number; include: boolean }[];
   combos: { name: string; entries: { catIdx: number; mode: Mode; value: number }[] }[];
+  presets?: Preset[];
+  lang?: Lang;
 }
 
 function encodeShare(state: ShareState): string {
