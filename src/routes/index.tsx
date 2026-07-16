@@ -62,6 +62,7 @@ import {
   type ParsedCard,
 } from "@/lib/deck-parser";
 import { resolveCardNames } from "@/lib/cards.functions";
+import { makeT, LANGS, type Lang } from "@/lib/i18n";
 
 
 export const Route = createFileRoute("/")({
