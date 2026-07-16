@@ -794,6 +794,8 @@ function HypergeometricCalculator() {
           value: e.value,
         })),
       })),
+      presets,
+      lang,
     };
     const enc = encodeShare(state);
     const base = `${window.location.origin}${window.location.pathname}`;
@@ -805,10 +807,10 @@ function HypergeometricCalculator() {
       const url = buildShareLink();
       await navigator.clipboard.writeText(url);
       window.history.replaceState(null, "", url);
-      toast.success("Link copiado para a área de transferência.");
+      toast.success(t("share_copied"));
     } catch (e) {
       console.error(e);
-      toast.error("Não consegui copiar o link.");
+      toast.error(t("share_fail"));
     }
   };
 
