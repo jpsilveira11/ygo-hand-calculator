@@ -1550,6 +1550,7 @@ function HypergeometricCalculator() {
                           unit="%"
                         />
                         <Tooltip
+                          cursor={{ fill: "var(--muted)", opacity: 0.15 }}
                           contentStyle={{
                             background: "var(--popover)",
                             border: "1px solid var(--border)",
@@ -1557,7 +1558,47 @@ function HypergeometricCalculator() {
                             fontSize: 12,
                             color: "var(--popover-foreground)",
                           }}
-                          formatter={(v: number) => `${v}%`}
+                          content={({ active, payload, label }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const row = payload[0].payload as {
+                              label: string;
+                              kind: string;
+                              T1: number;
+                              T2: number;
+                              T1frac: string;
+                              T2frac: string;
+                            };
+                            return (
+                              <div
+                                style={{
+                                  background: "var(--popover)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                  color: "var(--popover-foreground)",
+                                  padding: "8px 10px",
+                                  minWidth: 180,
+                                }}
+                              >
+                                <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
+                                <div style={{ opacity: 0.7, marginBottom: 6 }}>{row.kind}</div>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                                  <span style={{ color: "var(--gold)" }}>T1</span>
+                                  <span>
+                                    <strong>{row.T1}%</strong>{" "}
+                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T1frac}</span>
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                                  <span style={{ color: "var(--accent)" }}>T2</span>
+                                  <span>
+                                    <strong>{row.T2}%</strong>{" "}
+                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T2frac}</span>
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          }}
                         />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
                         <Bar dataKey="T1" fill="var(--gold)" radius={[4, 4, 0, 0]} />
