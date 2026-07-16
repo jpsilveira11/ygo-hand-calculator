@@ -366,7 +366,22 @@ function HypergeometricCalculator() {
     setDeckSize(state.size);
     setCategories(newCats);
     setCombos(newCombos);
-    toast.success("Configuração carregada do link compartilhado.");
+    if (state.lang === "pt" || state.lang === "en" || state.lang === "es") setLang(state.lang);
+    if (Array.isArray(state.presets) && state.presets.length > 0) {
+      // Merge shared presets into existing (shared takes precedence on name conflicts)
+      setPresets((prev) => {
+        const byName = new Map(prev.map((p) => [p.name, p]));
+        for (const p of state.presets!) byName.set(p.name, p);
+        const merged = Array.from(byName.values());
+        try {
+          window.localStorage.setItem("ygo-combo-presets", JSON.stringify(merged));
+        } catch {
+          /* ignore */
+        }
+        return merged;
+      });
+    }
+    toast.success(makeT(state.lang ?? lang)("share_loaded"));
   }, []);
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
