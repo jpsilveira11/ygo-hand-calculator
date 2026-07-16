@@ -1046,23 +1046,20 @@ function HypergeometricCalculator() {
           {/* Import */}
           <Card className="card-elevated">
             <CardHeader>
-              <CardTitle className="text-lg">Importar deck</CardTitle>
-              <CardDescription>
-                Cole a decklist, informe um link ydke:// ou envie um arquivo .ydk. IDs das cartas são
-                resolvidos em nomes automaticamente.
-              </CardDescription>
+              <CardTitle className="text-lg">{t("import_title")}</CardTitle>
+              <CardDescription>{t("import_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="paste">
                 <TabsList className="w-full flex-wrap h-auto">
                   <TabsTrigger value="paste" className="flex-1 gap-2 min-w-[110px]">
-                    <Copy className="w-4 h-4" /> Colar
+                    <Copy className="w-4 h-4" /> {t("tab_paste")}
                   </TabsTrigger>
                   <TabsTrigger value="ydke" className="flex-1 gap-2 min-w-[110px]">
-                    <Wand2 className="w-4 h-4" /> ydke://
+                    <Wand2 className="w-4 h-4" /> {t("tab_ydke")}
                   </TabsTrigger>
                   <TabsTrigger value="ydk" className="flex-1 gap-2 min-w-[110px]">
-                    <FileText className="w-4 h-4" /> .ydk
+                    <FileText className="w-4 h-4" /> {t("tab_ydk")}
                   </TabsTrigger>
                 </TabsList>
 
@@ -1076,10 +1073,10 @@ function HypergeometricCalculator() {
                   />
                   <div className="flex gap-2 flex-wrap">
                     <Button onClick={() => importFromText(pasteText)} className="bg-gold gap-2" disabled={importing}>
-                      <Upload className="w-4 h-4" /> Importar
+                      <Upload className="w-4 h-4" /> {t("import_btn")}
                     </Button>
                     <Button variant="ghost" onClick={clearImport} className="gap-2">
-                      <RefreshCw className="w-4 h-4" /> Limpar
+                      <RefreshCw className="w-4 h-4" /> {t("clear")}
                     </Button>
                   </div>
                 </TabsContent>
@@ -1091,13 +1088,15 @@ function HypergeometricCalculator() {
                     onChange={(e) => setYdkeUrl(e.target.value)}
                     className="font-mono text-xs"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Os IDs numéricos são resolvidos em nomes via YGOPRODeck. Cartas não encontradas
-                    ficam como "Card #ID".
-                  </p>
-                  <Button onClick={importFromYdkeUrl} className="bg-gold gap-2" disabled={importing}>
-                    <Upload className="w-4 h-4" /> {importing ? "Importando..." : "Importar link ydke"}
-                  </Button>
+                  <p className="text-xs text-muted-foreground">{t("ydke_hint")}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button onClick={importFromYdkeUrl} className="bg-gold gap-2" disabled={importing}>
+                      <Upload className="w-4 h-4" /> {importing ? t("importing") : t("import_ydke_btn")}
+                    </Button>
+                    <Button variant="ghost" onClick={clearImport} className="gap-2">
+                      <RefreshCw className="w-4 h-4" /> {t("clear")}
+                    </Button>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="ydk" className="space-y-3 pt-3">
@@ -1110,9 +1109,12 @@ function HypergeometricCalculator() {
                       if (f) importYdkFile(f);
                     }}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Os IDs do arquivo .ydk são resolvidos em nomes via YGOPRODeck automaticamente.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("ydk_hint")}</p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="ghost" onClick={clearImport} className="gap-2">
+                      <RefreshCw className="w-4 h-4" /> {t("clear")}
+                    </Button>
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -1122,12 +1124,11 @@ function HypergeometricCalculator() {
             <Card className="card-elevated">
               <CardHeader className="flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">Cartas do main deck</CardTitle>
-                  <CardDescription>
-                    Atribua cada carta a uma categoria — as contagens são somadas automaticamente.
-                  </CardDescription>
+                  <CardTitle className="text-lg">{t("main_cards")}</CardTitle>
+                  <CardDescription>{t("main_cards_desc")}</CardDescription>
                 </div>
-                <Badge variant="secondary">{parsedCards.length} entradas</Badge>
+                <Badge variant="secondary">{parsedCards.length} {t("entries")}</Badge>
+
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[320px] pr-3">
