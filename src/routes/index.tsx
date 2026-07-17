@@ -1684,9 +1684,9 @@ function HypergeometricCalculator() {
                     <div key={turn} className="rounded-lg border border-gold/30 bg-muted/30 p-3 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                          Turno {turn}
+                          {t("turn", { n: turn })}
                         </span>
-                        <Badge variant="outline" className="text-xs">{handSize} cartas</Badge>
+                        <Badge variant="outline" className="text-xs">{t("hand_cards", { n: handSize })}</Badge>
                       </div>
                       <div className="text-3xl sm:text-4xl font-bold text-gold font-display">
                         {(res.probability * 100).toFixed(2)}%
