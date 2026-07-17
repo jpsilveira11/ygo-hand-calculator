@@ -256,6 +256,7 @@ function HypergeometricCalculator() {
   const t = useMemo(() => makeT(lang), [lang]);
 
   const resultsRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   const shareLoadedRef = useRef<boolean>(false);
   const presetFileRef = useRef<HTMLInputElement>(null);
 
