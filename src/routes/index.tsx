@@ -1648,9 +1648,9 @@ function HypergeometricCalculator() {
             <CardHeader className="gradient-gold">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
-                  <CardTitle className="text-gold-foreground text-lg">Probabilidade de abertura</CardTitle>
+                  <CardTitle className="text-gold-foreground text-lg">{t("results_title")}</CardTitle>
                   <CardDescription className="text-gold-foreground/80">
-                    Formato {spec.label} · Deck {deckSize} · T1 {spec.turn1Hand} / T2 {spec.turn2Hand}
+                    {t("results_desc", { label: spec.label, size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
                   </CardDescription>
                 </div>
                 <div className="flex gap-2" data-export-hide>
