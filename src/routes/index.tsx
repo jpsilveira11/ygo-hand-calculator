@@ -1444,7 +1444,7 @@ function HypergeometricCalculator() {
 
               <Separator />
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Categorizado</span>
+                <span className="text-muted-foreground">{t("categorized")}</span>
                 <span className="font-mono">
                   {totalCategorized} / {deckSize}
                 </span>
