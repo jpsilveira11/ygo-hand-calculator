@@ -1850,7 +1850,7 @@ function HypergeometricCalculator() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{cat.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {size} no deck · {modeLabel(cat.mode)} {cat.value}
+                        {t("in_deck_short", { n: size })} · {modeLabel(cat.mode)} {cat.value}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
