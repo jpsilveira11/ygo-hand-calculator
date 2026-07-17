@@ -913,6 +913,40 @@ function HypergeometricCalculator() {
     }
   };
 
+  const copyShortShareLink = async () => {
+    try {
+      const url = buildShareLink();
+      // Try is.gd first, tinyurl as fallback (both support CORS).
+      let short = "";
+      try {
+        const r = await fetch(
+          `https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`,
+        );
+        if (r.ok) {
+          const txt = (await r.text()).trim();
+          if (/^https?:\/\//.test(txt)) short = txt;
+        }
+      } catch {
+        /* fallback below */
+      }
+      if (!short) {
+        const r2 = await fetch(
+          `https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`,
+        );
+        if (!r2.ok) throw new Error("shortener failed");
+        const txt = (await r2.text()).trim();
+        if (!/^https?:\/\//.test(txt)) throw new Error("bad shortener response");
+        short = txt;
+      }
+      await navigator.clipboard.writeText(short);
+      window.history.replaceState(null, "", url);
+      toast.success(`${t("share_copied")} (${short})`);
+    } catch (e) {
+      console.error(e);
+      toast.error(t("share_fail"));
+    }
+  };
+
   // -------------------- Export --------------------
 
   const exportResults = async (kind: "png" | "pdf") => {
