@@ -1701,7 +1701,7 @@ function HypergeometricCalculator() {
 
               {resultsByTurn && (
                 <div className="text-xs text-muted-foreground">
-                  Combinando: {included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ")}
+                  {t("combining", { list: included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ") })}
                 </div>
               )}
 
