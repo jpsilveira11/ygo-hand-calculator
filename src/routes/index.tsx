@@ -310,7 +310,14 @@ function HypergeometricCalculator() {
     }
     try {
       const l = window.localStorage.getItem("lang");
-      if (l === "pt" || l === "en" || l === "es") setLang(l);
+      if (l === "pt" || l === "en" || l === "es") {
+        setLang(l);
+      } else {
+        const nav = (navigator.language || "en").toLowerCase();
+        if (nav.startsWith("pt")) setLang("pt");
+        else if (nav.startsWith("es")) setLang("es");
+        else setLang("en");
+      }
     } catch {
       /* ignore */
     }
