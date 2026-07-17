@@ -1407,7 +1407,7 @@ function HypergeometricCalculator() {
                         />
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Modo</Label>
+                        <Label className="text-xs text-muted-foreground">{t("mode")}</Label>
                         <Select
                           value={c.mode}
                           onValueChange={(v) => updateCategory(c.id, { mode: v as Mode })}
@@ -1417,14 +1417,14 @@ function HypergeometricCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="atLeast">≥ ao menos</SelectItem>
-                            <SelectItem value="exactly">= exatamente</SelectItem>
-                            <SelectItem value="atMost">≤ no máximo</SelectItem>
+                            <SelectItem value="atLeast">{t("mode_atleast")}</SelectItem>
+                            <SelectItem value="exactly">{t("mode_exactly")}</SelectItem>
+                            <SelectItem value="atMost">{t("mode_atmost")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Valor</Label>
+                        <Label className="text-xs text-muted-foreground">{t("value")}</Label>
                         <Input
                           type="number"
                           min={0}
