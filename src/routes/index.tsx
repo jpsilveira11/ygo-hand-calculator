@@ -1394,7 +1394,7 @@ function HypergeometricCalculator() {
 
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <Label className="text-xs text-muted-foreground">No deck</Label>
+                        <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
                         <Input
                           type="number"
                           min={0}
