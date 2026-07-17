@@ -1010,6 +1010,9 @@ function HypergeometricCalculator() {
       .join("");
     summary.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">T1 vs T2 — valores exatos</div>${rowsHtml}`;
     host.appendChild(summary);
+    const toHide = Array.from(host.querySelectorAll<HTMLElement>("[data-export-hide]"));
+    const prevDisplay = toHide.map((el) => el.style.display);
+    toHide.forEach((el) => (el.style.display = "none"));
     try {
       setExporting(true);
       const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
