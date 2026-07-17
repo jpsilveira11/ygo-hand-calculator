@@ -1837,10 +1837,10 @@ function HypergeometricCalculator() {
 
               <div className="space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Por categoria
+                  {t("by_category")}
                 </p>
                 {perCategoryResults.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nenhuma categoria incluída.</p>
+                  <p className="text-xs text-muted-foreground">{t("no_cat_included")}</p>
                 )}
                 {perCategoryResults.map(({ cat, size, byTurn }) => (
                   <div
