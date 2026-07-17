@@ -776,22 +776,100 @@ function HypergeometricCalculator() {
   };
 
   const importPresetsJson = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) throw new Error("bad shape");
-      const valid: Preset[] = parsed.filter(
-        (p) => p && typeof p.name === "string" && Array.isArray(p.combos),
-      );
-      if (valid.length === 0) throw new Error("empty");
-      const byName = new Map(presets.map((p) => [p.name, p]));
-      for (const p of valid) byName.set(p.name, p);
-      persistPresets(Array.from(byName.values()));
-      toast.success(t("presets_imported", { n: valid.length }));
-    } catch (e) {
-      console.error(e);
-      toast.error(t("presets_invalid"));
+    const text = await file.text().catch(() => "");
+    if (!text) {
+      toast.error(`${t("presets_invalid")} — arquivo vazio ou ilegível.`);
+      return;
     }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      const msg = (e as Error).message || "JSON inválido";
+      // Try to extract position → line/column
+      const posMatch = msg.match(/position\s+(\d+)/i);
+      let where = "";
+      if (posMatch) {
+        const pos = Number(posMatch[1]);
+        const upto = text.slice(0, pos);
+        const line = upto.split("\n").length;
+        const col = pos - upto.lastIndexOf("\n");
+        where = ` (linha ${line}, coluna ${col})`;
+      }
+      toast.error(`${t("presets_invalid")} — ${msg}${where}`, { duration: 8000 });
+      return;
+    }
+    if (!Array.isArray(parsed)) {
+      toast.error(`${t("presets_invalid")} — raiz deve ser um array de presets.`, { duration: 8000 });
+      return;
+    }
+    const errors: string[] = [];
+    const valid: Preset[] = [];
+    (parsed as unknown[]).forEach((raw, i) => {
+      const path = `presets[${i}]`;
+      if (!raw || typeof raw !== "object") {
+        errors.push(`${path}: deve ser objeto.`);
+        return;
+      }
+      const p = raw as Record<string, unknown>;
+      if (typeof p.name !== "string" || !p.name.trim()) {
+        errors.push(`${path}.name: string obrigatória.`);
+        return;
+      }
+      if (!Array.isArray(p.combos)) {
+        errors.push(`${path}.combos: array obrigatório.`);
+        return;
+      }
+      const combosOut: Preset["combos"] = [];
+      let comboOk = true;
+      (p.combos as unknown[]).forEach((rawCb, j) => {
+        const cp = `${path}.combos[${j}]`;
+        if (!rawCb || typeof rawCb !== "object") {
+          errors.push(`${cp}: deve ser objeto.`); comboOk = false; return;
+        }
+        const cb = rawCb as Record<string, unknown>;
+        if (typeof cb.name !== "string") {
+          errors.push(`${cp}.name: string obrigatória.`); comboOk = false; return;
+        }
+        if (!Array.isArray(cb.entries)) {
+          errors.push(`${cp}.entries: array obrigatório.`); comboOk = false; return;
+        }
+        const entriesOut: Preset["combos"][number]["entries"] = [];
+        let entriesOk = true;
+        (cb.entries as unknown[]).forEach((rawE, k) => {
+          const ep = `${cp}.entries[${k}]`;
+          if (!rawE || typeof rawE !== "object") {
+            errors.push(`${ep}: deve ser objeto.`); entriesOk = false; return;
+          }
+          const e = rawE as Record<string, unknown>;
+          if (typeof e.catName !== "string") { errors.push(`${ep}.catName: string obrigatória.`); entriesOk = false; return; }
+          if (e.mode !== "atLeast" && e.mode !== "exactly" && e.mode !== "atMost") {
+            errors.push(`${ep}.mode: deve ser "atLeast" | "exactly" | "atMost".`); entriesOk = false; return;
+          }
+          if (typeof e.value !== "number" || !Number.isFinite(e.value) || e.value < 0) {
+            errors.push(`${ep}.value: número >= 0 obrigatório.`); entriesOk = false; return;
+          }
+          entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value });
+        });
+        if (entriesOk) combosOut.push({ name: cb.name, entries: entriesOut });
+        else comboOk = false;
+      });
+      if (comboOk) valid.push({ name: p.name, combos: combosOut });
+    });
+    if (errors.length > 0) {
+      const preview = errors.slice(0, 5).join("\n");
+      const more = errors.length > 5 ? `\n… e mais ${errors.length - 5} erro(s).` : "";
+      toast.error(`${t("presets_invalid")}\n${preview}${more}`, { duration: 12000 });
+      return;
+    }
+    if (valid.length === 0) {
+      toast.error(`${t("presets_invalid")} — nenhum preset válido encontrado.`);
+      return;
+    }
+    const byName = new Map(presets.map((p) => [p.name, p]));
+    for (const p of valid) byName.set(p.name, p);
+    persistPresets(Array.from(byName.values()));
+    toast.success(t("presets_imported", { n: valid.length }));
   };
 
   // -------------------- Share --------------------
