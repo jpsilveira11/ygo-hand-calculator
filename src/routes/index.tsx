@@ -1069,6 +1069,9 @@ function HypergeometricCalculator() {
             <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title={t("share_title")}>
               <Share2 className="w-4 h-4" /> {t("share")}
             </Button>
+            <Button size="sm" variant="outline" onClick={copyShortShareLink} className="gap-2" title="Copiar link curto (is.gd/tinyurl)">
+              <Share2 className="w-4 h-4" /> Link curto
+            </Button>
             <Select value={lang} onValueChange={(v) => setLang(v as Lang)}>
               <SelectTrigger className="w-[140px] h-9" aria-label={t("language")}>
                 <div className="flex items-center gap-2">
