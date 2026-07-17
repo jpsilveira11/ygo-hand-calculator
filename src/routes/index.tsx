@@ -1535,7 +1535,7 @@ function HypergeometricCalculator() {
                         <button
                           className="hover:text-destructive"
                           onClick={() => deletePreset(p.name)}
-                          aria-label={`Remover ${p.name}`}
+                          aria-label={`${t("remove_cat")} ${p.name}`}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
