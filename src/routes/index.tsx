@@ -1872,8 +1872,7 @@ function HypergeometricCalculator() {
       </main>
 
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground">
-        Cálculo baseado na distribuição hipergeométrica multivariada. Yu-Gi-Oh! é marca registrada da
-        Konami.
+        {t("footer")}
       </footer>
     </div>
   );
