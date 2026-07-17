@@ -1710,7 +1710,7 @@ function HypergeometricCalculator() {
                 <div ref={chartRef} className="rounded-lg border border-border bg-muted/20 p-3">
                   <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      Comparativo T1 vs T2 (%)
+                      {t("chart_title")}
                     </p>
                     <div className="flex gap-2" data-export-hide>
                       <Button size="sm" variant="outline" onClick={() => exportChart("png")} disabled={exporting} className="gap-1 h-7">
