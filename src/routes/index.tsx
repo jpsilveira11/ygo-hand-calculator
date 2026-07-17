@@ -1040,6 +1040,7 @@ function HypergeometricCalculator() {
       console.error(e);
       toast.error(t("export_fail"));
     } finally {
+      toHide.forEach((el, i) => (el.style.display = prevDisplay[i]));
       host.removeChild(summary);
       setExporting(false);
     }
