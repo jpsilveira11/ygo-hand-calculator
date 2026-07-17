@@ -1674,7 +1674,7 @@ function HypergeometricCalculator() {
 
               {included.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  Ative pelo menos uma categoria (interruptor à esquerda do nome) para calcular.
+                  {t("activate_cat_hint")}
                 </p>
               )}
 
