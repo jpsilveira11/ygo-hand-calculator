@@ -252,7 +252,7 @@ function HypergeometricCalculator() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState<string>("");
 
-  const [lang, setLang] = useState<Lang>("pt");
+  const [lang, setLang] = useState<Lang>("en");
   const t = useMemo(() => makeT(lang), [lang]);
 
   const resultsRef = useRef<HTMLDivElement>(null);
