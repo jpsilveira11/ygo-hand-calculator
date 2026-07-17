@@ -1385,7 +1385,7 @@ function HypergeometricCalculator() {
                         size="icon"
                         variant="ghost"
                         onClick={() => removeCategory(c.id)}
-                        aria-label="Remover categoria"
+                        aria-label={t("remove_cat")}
                         className="h-8 w-8 shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
