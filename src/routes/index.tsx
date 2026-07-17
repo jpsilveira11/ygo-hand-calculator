@@ -1457,11 +1457,9 @@ function HypergeometricCalculator() {
             <CardHeader className="flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-gold" /> Combos personalizados
+                  <Zap className="w-4 h-4 text-gold" /> {t("combos_title")}
                 </CardTitle>
-                <CardDescription>
-                  Combine categorias com modos (≥ ao menos, = exatamente, ≤ no máximo).
-                </CardDescription>
+                <CardDescription>{t("combos_desc")}</CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCombo} className="gap-1" disabled={categories.length === 0}>
                 <Plus className="w-4 h-4" /> {t("new_m")}
