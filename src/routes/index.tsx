@@ -986,7 +986,62 @@ function HypergeometricCalculator() {
     }
   };
 
-  // -------------------- Render --------------------
+  const exportChart = async (kind: "png" | "pdf") => {
+    if (!chartRef.current) return;
+    // Inject a temporary summary table so the exported image includes T1/T2 % + fractions
+    // (tooltips are interactive-only and don't appear in static captures).
+    const host = chartRef.current;
+    const summary = document.createElement("div");
+    summary.setAttribute("data-chart-summary", "1");
+    summary.style.cssText = `
+      margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--muted); font-size: 11px;
+      color: var(--foreground); font-family: ui-monospace, SFMono-Regular, monospace;
+    `;
+    const rowsHtml = chartData
+      .map(
+        (r) => `
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;">
+          <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</span>
+          <span style="color:var(--gold);">T1 ${r.T1}% <span style="opacity:.6">${r.T1frac}</span></span>
+          <span style="color:var(--accent);">T2 ${r.T2}% <span style="opacity:.6">${r.T2frac}</span></span>
+        </div>`,
+      )
+      .join("");
+    summary.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">T1 vs T2 — valores exatos</div>${rowsHtml}`;
+    host.appendChild(summary);
+    try {
+      setExporting(true);
+      const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
+      const dataUrl = await toPng(host, { pixelRatio: 2, backgroundColor: bg, cacheBust: true });
+      if (kind === "png") {
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `grafico-t1-t2-${spec.label.toLowerCase()}.png`;
+        a.click();
+        toast.success(t("export_png_ok"));
+      } else {
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((r) => (img.onload = r));
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? "landscape" : "portrait",
+          unit: "px",
+          format: [img.width, img.height],
+        });
+        pdf.addImage(dataUrl, "PNG", 0, 0, img.width, img.height);
+        pdf.save(`grafico-t1-t2-${spec.label.toLowerCase()}.pdf`);
+        toast.success(t("export_pdf_ok"));
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(t("export_fail"));
+    } finally {
+      host.removeChild(summary);
+      setExporting(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen">
