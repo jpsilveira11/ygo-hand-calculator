@@ -1707,10 +1707,20 @@ function HypergeometricCalculator() {
 
               {/* Chart T1 vs T2 */}
               {chartData.length > 0 && (
-                <div className="rounded-lg border border-border bg-muted/20 p-3">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
-                    Comparativo T1 vs T2 (%)
-                  </p>
+                <div ref={chartRef} className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                      Comparativo T1 vs T2 (%)
+                    </p>
+                    <div className="flex gap-2" data-export-hide>
+                      <Button size="sm" variant="outline" onClick={() => exportChart("png")} disabled={exporting} className="gap-1 h-7">
+                        <ImageIcon className="w-3.5 h-3.5" /> PNG
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => exportChart("pdf")} disabled={exporting} className="gap-1 h-7">
+                        <FileDown className="w-3.5 h-3.5" /> PDF
+                      </Button>
+                    </div>
+                  </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 40 }}>
