@@ -1635,7 +1635,7 @@ function HypergeometricCalculator() {
                         });
                       }}
                     >
-                      <Plus className="w-3 h-3" /> Adicionar categoria
+                      <Plus className="w-3 h-3" /> {t("add_category")}
                     </Button>
                   </div>
                 </div>
