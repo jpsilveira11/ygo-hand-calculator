@@ -1356,13 +1356,11 @@ function HypergeometricCalculator() {
           <Card className="card-elevated">
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-lg">Categorias</CardTitle>
-                <CardDescription>
-                  Escolha um modo (≥, =, ≤) para cada categoria e defina o valor alvo.
-                </CardDescription>
+                <CardTitle className="text-lg">{t("categories")}</CardTitle>
+                <CardDescription>{t("categories_desc")}</CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCategory} className="gap-1">
-                <Plus className="w-4 h-4" /> Nova
+                <Plus className="w-4 h-4" /> {t("new_f")}
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
