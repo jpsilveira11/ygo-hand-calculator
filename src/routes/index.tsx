@@ -1802,7 +1802,7 @@ function HypergeometricCalculator() {
                   <Separator />
                   <div className="space-y-2">
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      Combos personalizados
+                      {t("combos_title")}
                     </p>
                     {comboResults.map(({ combo, valid, byTurn }) => (
                       <div key={combo.id} className="p-2 rounded-md bg-gold/10 border border-gold/30 space-y-1.5">
