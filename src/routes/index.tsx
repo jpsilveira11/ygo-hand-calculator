@@ -1356,13 +1356,11 @@ function HypergeometricCalculator() {
           <Card className="card-elevated">
             <CardHeader className="flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-lg">Categorias</CardTitle>
-                <CardDescription>
-                  Escolha um modo (≥, =, ≤) para cada categoria e defina o valor alvo.
-                </CardDescription>
+                <CardTitle className="text-lg">{t("categories")}</CardTitle>
+                <CardDescription>{t("categories_desc")}</CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCategory} className="gap-1">
-                <Plus className="w-4 h-4" /> Nova
+                <Plus className="w-4 h-4" /> {t("new_f")}
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1387,7 +1385,7 @@ function HypergeometricCalculator() {
                         size="icon"
                         variant="ghost"
                         onClick={() => removeCategory(c.id)}
-                        aria-label="Remover categoria"
+                        aria-label={t("remove_cat")}
                         className="h-8 w-8 shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1396,7 +1394,7 @@ function HypergeometricCalculator() {
 
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <Label className="text-xs text-muted-foreground">No deck</Label>
+                        <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
                         <Input
                           type="number"
                           min={0}
@@ -1409,7 +1407,7 @@ function HypergeometricCalculator() {
                         />
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Modo</Label>
+                        <Label className="text-xs text-muted-foreground">{t("mode")}</Label>
                         <Select
                           value={c.mode}
                           onValueChange={(v) => updateCategory(c.id, { mode: v as Mode })}
@@ -1419,14 +1417,14 @@ function HypergeometricCalculator() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="atLeast">≥ ao menos</SelectItem>
-                            <SelectItem value="exactly">= exatamente</SelectItem>
-                            <SelectItem value="atMost">≤ no máximo</SelectItem>
+                            <SelectItem value="atLeast">{t("mode_atleast")}</SelectItem>
+                            <SelectItem value="exactly">{t("mode_exactly")}</SelectItem>
+                            <SelectItem value="atMost">{t("mode_atmost")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Valor</Label>
+                        <Label className="text-xs text-muted-foreground">{t("value")}</Label>
                         <Input
                           type="number"
                           min={0}
@@ -1446,7 +1444,7 @@ function HypergeometricCalculator() {
 
               <Separator />
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Categorizado</span>
+                <span className="text-muted-foreground">{t("categorized")}</span>
                 <span className="font-mono">
                   {totalCategorized} / {deckSize}
                 </span>
@@ -1459,11 +1457,9 @@ function HypergeometricCalculator() {
             <CardHeader className="flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-gold" /> Combos personalizados
+                  <Zap className="w-4 h-4 text-gold" /> {t("combos_title")}
                 </CardTitle>
-                <CardDescription>
-                  Combine categorias com modos (≥ ao menos, = exatamente, ≤ no máximo).
-                </CardDescription>
+                <CardDescription>{t("combos_desc")}</CardDescription>
               </div>
               <Button size="sm" variant="outline" onClick={addCombo} className="gap-1" disabled={categories.length === 0}>
                 <Plus className="w-4 h-4" /> {t("new_m")}
@@ -1539,7 +1535,7 @@ function HypergeometricCalculator() {
                         <button
                           className="hover:text-destructive"
                           onClick={() => deletePreset(p.name)}
-                          aria-label={`Remover ${p.name}`}
+                          aria-label={`${t("remove_cat")} ${p.name}`}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -1639,7 +1635,7 @@ function HypergeometricCalculator() {
                         });
                       }}
                     >
-                      <Plus className="w-3 h-3" /> Adicionar categoria
+                      <Plus className="w-3 h-3" /> {t("add_category")}
                     </Button>
                   </div>
                 </div>
@@ -1652,9 +1648,9 @@ function HypergeometricCalculator() {
             <CardHeader className="gradient-gold">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div>
-                  <CardTitle className="text-gold-foreground text-lg">Probabilidade de abertura</CardTitle>
+                  <CardTitle className="text-gold-foreground text-lg">{t("results_title")}</CardTitle>
                   <CardDescription className="text-gold-foreground/80">
-                    Formato {spec.label} · Deck {deckSize} · T1 {spec.turn1Hand} / T2 {spec.turn2Hand}
+                    {t("results_desc", { label: spec.label, size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
                   </CardDescription>
                 </div>
                 <div className="flex gap-2" data-export-hide>
@@ -1678,7 +1674,7 @@ function HypergeometricCalculator() {
 
               {included.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  Ative pelo menos uma categoria (interruptor à esquerda do nome) para calcular.
+                  {t("activate_cat_hint")}
                 </p>
               )}
 
@@ -1688,9 +1684,9 @@ function HypergeometricCalculator() {
                     <div key={turn} className="rounded-lg border border-gold/30 bg-muted/30 p-3 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                          Turno {turn}
+                          {t("turn", { n: turn })}
                         </span>
-                        <Badge variant="outline" className="text-xs">{handSize} cartas</Badge>
+                        <Badge variant="outline" className="text-xs">{t("hand_cards", { n: handSize })}</Badge>
                       </div>
                       <div className="text-3xl sm:text-4xl font-bold text-gold font-display">
                         {(res.probability * 100).toFixed(2)}%
@@ -1705,7 +1701,7 @@ function HypergeometricCalculator() {
 
               {resultsByTurn && (
                 <div className="text-xs text-muted-foreground">
-                  Combinando: {included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ")}
+                  {t("combining", { list: included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ") })}
                 </div>
               )}
 
@@ -1714,7 +1710,7 @@ function HypergeometricCalculator() {
                 <div ref={chartRef} className="rounded-lg border border-border bg-muted/20 p-3">
                   <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      Comparativo T1 vs T2 (%)
+                      {t("chart_title")}
                     </p>
                     <div className="flex gap-2" data-export-hide>
                       <Button size="sm" variant="outline" onClick={() => exportChart("png")} disabled={exporting} className="gap-1 h-7">
@@ -1806,7 +1802,7 @@ function HypergeometricCalculator() {
                   <Separator />
                   <div className="space-y-2">
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      Combos personalizados
+                      {t("combos_title")}
                     </p>
                     {comboResults.map(({ combo, valid, byTurn }) => (
                       <div key={combo.id} className="p-2 rounded-md bg-gold/10 border border-gold/30 space-y-1.5">
@@ -1841,10 +1837,10 @@ function HypergeometricCalculator() {
 
               <div className="space-y-2">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                  Por categoria
+                  {t("by_category")}
                 </p>
                 {perCategoryResults.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Nenhuma categoria incluída.</p>
+                  <p className="text-xs text-muted-foreground">{t("no_cat_included")}</p>
                 )}
                 {perCategoryResults.map(({ cat, size, byTurn }) => (
                   <div
@@ -1854,7 +1850,7 @@ function HypergeometricCalculator() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{cat.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {size} no deck · {modeLabel(cat.mode)} {cat.value}
+                        {t("in_deck_short", { n: size })} · {modeLabel(cat.mode)} {cat.value}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -1876,8 +1872,7 @@ function HypergeometricCalculator() {
       </main>
 
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground">
-        Cálculo baseado na distribuição hipergeométrica multivariada. Yu-Gi-Oh! é marca registrada da
-        Konami.
+        {t("footer")}
       </footer>
     </div>
   );
