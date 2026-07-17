@@ -252,10 +252,11 @@ function HypergeometricCalculator() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState<string>("");
 
-  const [lang, setLang] = useState<Lang>("pt");
+  const [lang, setLang] = useState<Lang>("en");
   const t = useMemo(() => makeT(lang), [lang]);
 
   const resultsRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   const shareLoadedRef = useRef<boolean>(false);
   const presetFileRef = useRef<HTMLInputElement>(null);
 
@@ -309,7 +310,14 @@ function HypergeometricCalculator() {
     }
     try {
       const l = window.localStorage.getItem("lang");
-      if (l === "pt" || l === "en" || l === "es") setLang(l);
+      if (l === "pt" || l === "en" || l === "es") {
+        setLang(l);
+      } else {
+        const nav = (navigator.language || "en").toLowerCase();
+        if (nav.startsWith("pt")) setLang("pt");
+        else if (nav.startsWith("es")) setLang("es");
+        else setLang("en");
+      }
     } catch {
       /* ignore */
     }
@@ -768,22 +776,100 @@ function HypergeometricCalculator() {
   };
 
   const importPresetsJson = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (!Array.isArray(parsed)) throw new Error("bad shape");
-      const valid: Preset[] = parsed.filter(
-        (p) => p && typeof p.name === "string" && Array.isArray(p.combos),
-      );
-      if (valid.length === 0) throw new Error("empty");
-      const byName = new Map(presets.map((p) => [p.name, p]));
-      for (const p of valid) byName.set(p.name, p);
-      persistPresets(Array.from(byName.values()));
-      toast.success(t("presets_imported", { n: valid.length }));
-    } catch (e) {
-      console.error(e);
-      toast.error(t("presets_invalid"));
+    const text = await file.text().catch(() => "");
+    if (!text) {
+      toast.error(`${t("presets_invalid")} — arquivo vazio ou ilegível.`);
+      return;
     }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      const msg = (e as Error).message || "JSON inválido";
+      // Try to extract position → line/column
+      const posMatch = msg.match(/position\s+(\d+)/i);
+      let where = "";
+      if (posMatch) {
+        const pos = Number(posMatch[1]);
+        const upto = text.slice(0, pos);
+        const line = upto.split("\n").length;
+        const col = pos - upto.lastIndexOf("\n");
+        where = ` (linha ${line}, coluna ${col})`;
+      }
+      toast.error(`${t("presets_invalid")} — ${msg}${where}`, { duration: 8000 });
+      return;
+    }
+    if (!Array.isArray(parsed)) {
+      toast.error(`${t("presets_invalid")} — raiz deve ser um array de presets.`, { duration: 8000 });
+      return;
+    }
+    const errors: string[] = [];
+    const valid: Preset[] = [];
+    (parsed as unknown[]).forEach((raw, i) => {
+      const path = `presets[${i}]`;
+      if (!raw || typeof raw !== "object") {
+        errors.push(`${path}: deve ser objeto.`);
+        return;
+      }
+      const p = raw as Record<string, unknown>;
+      if (typeof p.name !== "string" || !p.name.trim()) {
+        errors.push(`${path}.name: string obrigatória.`);
+        return;
+      }
+      if (!Array.isArray(p.combos)) {
+        errors.push(`${path}.combos: array obrigatório.`);
+        return;
+      }
+      const combosOut: Preset["combos"] = [];
+      let comboOk = true;
+      (p.combos as unknown[]).forEach((rawCb, j) => {
+        const cp = `${path}.combos[${j}]`;
+        if (!rawCb || typeof rawCb !== "object") {
+          errors.push(`${cp}: deve ser objeto.`); comboOk = false; return;
+        }
+        const cb = rawCb as Record<string, unknown>;
+        if (typeof cb.name !== "string") {
+          errors.push(`${cp}.name: string obrigatória.`); comboOk = false; return;
+        }
+        if (!Array.isArray(cb.entries)) {
+          errors.push(`${cp}.entries: array obrigatório.`); comboOk = false; return;
+        }
+        const entriesOut: Preset["combos"][number]["entries"] = [];
+        let entriesOk = true;
+        (cb.entries as unknown[]).forEach((rawE, k) => {
+          const ep = `${cp}.entries[${k}]`;
+          if (!rawE || typeof rawE !== "object") {
+            errors.push(`${ep}: deve ser objeto.`); entriesOk = false; return;
+          }
+          const e = rawE as Record<string, unknown>;
+          if (typeof e.catName !== "string") { errors.push(`${ep}.catName: string obrigatória.`); entriesOk = false; return; }
+          if (e.mode !== "atLeast" && e.mode !== "exactly" && e.mode !== "atMost") {
+            errors.push(`${ep}.mode: deve ser "atLeast" | "exactly" | "atMost".`); entriesOk = false; return;
+          }
+          if (typeof e.value !== "number" || !Number.isFinite(e.value) || e.value < 0) {
+            errors.push(`${ep}.value: número >= 0 obrigatório.`); entriesOk = false; return;
+          }
+          entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value });
+        });
+        if (entriesOk) combosOut.push({ name: cb.name, entries: entriesOut });
+        else comboOk = false;
+      });
+      if (comboOk) valid.push({ name: p.name, combos: combosOut });
+    });
+    if (errors.length > 0) {
+      const preview = errors.slice(0, 5).join("\n");
+      const more = errors.length > 5 ? `\n… e mais ${errors.length - 5} erro(s).` : "";
+      toast.error(`${t("presets_invalid")}\n${preview}${more}`, { duration: 12000 });
+      return;
+    }
+    if (valid.length === 0) {
+      toast.error(`${t("presets_invalid")} — nenhum preset válido encontrado.`);
+      return;
+    }
+    const byName = new Map(presets.map((p) => [p.name, p]));
+    for (const p of valid) byName.set(p.name, p);
+    persistPresets(Array.from(byName.values()));
+    toast.success(t("presets_imported", { n: valid.length }));
   };
 
   // -------------------- Share --------------------
@@ -821,6 +907,40 @@ function HypergeometricCalculator() {
       await navigator.clipboard.writeText(url);
       window.history.replaceState(null, "", url);
       toast.success(t("share_copied"));
+    } catch (e) {
+      console.error(e);
+      toast.error(t("share_fail"));
+    }
+  };
+
+  const copyShortShareLink = async () => {
+    try {
+      const url = buildShareLink();
+      // Try is.gd first, tinyurl as fallback (both support CORS).
+      let short = "";
+      try {
+        const r = await fetch(
+          `https://is.gd/create.php?format=simple&url=${encodeURIComponent(url)}`,
+        );
+        if (r.ok) {
+          const txt = (await r.text()).trim();
+          if (/^https?:\/\//.test(txt)) short = txt;
+        }
+      } catch {
+        /* fallback below */
+      }
+      if (!short) {
+        const r2 = await fetch(
+          `https://tinyurl.com/api-create.php?url=${encodeURIComponent(url)}`,
+        );
+        if (!r2.ok) throw new Error("shortener failed");
+        const txt = (await r2.text()).trim();
+        if (!/^https?:\/\//.test(txt)) throw new Error("bad shortener response");
+        short = txt;
+      }
+      await navigator.clipboard.writeText(short);
+      window.history.replaceState(null, "", url);
+      toast.success(`${t("share_copied")} (${short})`);
     } catch (e) {
       console.error(e);
       toast.error(t("share_fail"));
@@ -866,7 +986,66 @@ function HypergeometricCalculator() {
     }
   };
 
-  // -------------------- Render --------------------
+  const exportChart = async (kind: "png" | "pdf") => {
+    if (!chartRef.current) return;
+    // Inject a temporary summary table so the exported image includes T1/T2 % + fractions
+    // (tooltips are interactive-only and don't appear in static captures).
+    const host = chartRef.current;
+    const summary = document.createElement("div");
+    summary.setAttribute("data-chart-summary", "1");
+    summary.style.cssText = `
+      margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--muted); font-size: 11px;
+      color: var(--foreground); font-family: ui-monospace, SFMono-Regular, monospace;
+    `;
+    const rowsHtml = chartData
+      .map(
+        (r) => `
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;">
+          <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</span>
+          <span style="color:var(--gold);">T1 ${r.T1}% <span style="opacity:.6">${r.T1frac}</span></span>
+          <span style="color:var(--accent);">T2 ${r.T2}% <span style="opacity:.6">${r.T2frac}</span></span>
+        </div>`,
+      )
+      .join("");
+    summary.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">T1 vs T2 — valores exatos</div>${rowsHtml}`;
+    host.appendChild(summary);
+    const toHide = Array.from(host.querySelectorAll<HTMLElement>("[data-export-hide]"));
+    const prevDisplay = toHide.map((el) => el.style.display);
+    toHide.forEach((el) => (el.style.display = "none"));
+    try {
+      setExporting(true);
+      const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
+      const dataUrl = await toPng(host, { pixelRatio: 2, backgroundColor: bg, cacheBust: true });
+      if (kind === "png") {
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = `grafico-t1-t2-${spec.label.toLowerCase()}.png`;
+        a.click();
+        toast.success(t("export_png_ok"));
+      } else {
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((r) => (img.onload = r));
+        const pdf = new jsPDF({
+          orientation: img.width > img.height ? "landscape" : "portrait",
+          unit: "px",
+          format: [img.width, img.height],
+        });
+        pdf.addImage(dataUrl, "PNG", 0, 0, img.width, img.height);
+        pdf.save(`grafico-t1-t2-${spec.label.toLowerCase()}.pdf`);
+        toast.success(t("export_pdf_ok"));
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error(t("export_fail"));
+    } finally {
+      toHide.forEach((el, i) => (el.style.display = prevDisplay[i]));
+      host.removeChild(summary);
+      setExporting(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen">
@@ -893,6 +1072,9 @@ function HypergeometricCalculator() {
             </Badge>
             <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title={t("share_title")}>
               <Share2 className="w-4 h-4" /> {t("share")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={copyShortShareLink} className="gap-2" title="Copiar link curto (is.gd/tinyurl)">
+              <Share2 className="w-4 h-4" /> Link curto
             </Button>
             <Select value={lang} onValueChange={(v) => setLang(v as Lang)}>
               <SelectTrigger className="w-[140px] h-9" aria-label={t("language")}>
@@ -1529,10 +1711,20 @@ function HypergeometricCalculator() {
 
               {/* Chart T1 vs T2 */}
               {chartData.length > 0 && (
-                <div className="rounded-lg border border-border bg-muted/20 p-3">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
-                    Comparativo T1 vs T2 (%)
-                  </p>
+                <div ref={chartRef} className="rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                      Comparativo T1 vs T2 (%)
+                    </p>
+                    <div className="flex gap-2" data-export-hide>
+                      <Button size="sm" variant="outline" onClick={() => exportChart("png")} disabled={exporting} className="gap-1 h-7">
+                        <ImageIcon className="w-3.5 h-3.5" /> PNG
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => exportChart("pdf")} disabled={exporting} className="gap-1 h-7">
+                        <FileDown className="w-3.5 h-3.5" /> PDF
+                      </Button>
+                    </div>
+                  </div>
                   <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 40 }}>
