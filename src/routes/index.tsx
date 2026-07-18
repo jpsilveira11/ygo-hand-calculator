@@ -690,14 +690,19 @@ function HypergeometricCalculator() {
         const size = effectiveCount(cat);
         if (e.value < 0) return false;
         if (e.mode !== "atMost" && e.value > size) return false;
+        if (e.mode === "between") {
+          const hi = e.valueMax ?? e.value;
+          if (hi < e.value) return false;
+          if (hi > size) return false;
+        }
         return true;
       });
     const byTurn = hands.map(({ turn, size: hs }) => {
       if (!valid)
         return { turn, handSize: hs, res: null as ReturnType<typeof multivariateProbability> | null };
-      // Minimum forced picks (atLeast/exactly) sum
+      // Minimum forced picks (atLeast/exactly/between) sum
       const forcedMin = combo.entries.reduce(
-        (s, e) => s + (e.mode === "atMost" ? 0 : e.value),
+        (s, e) => s + forcedMinValue(e.mode, e.value),
         0,
       );
       if (forcedMin > hs) return { turn, handSize: hs, res: null };
