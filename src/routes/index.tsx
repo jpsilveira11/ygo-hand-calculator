@@ -1805,7 +1805,7 @@ function HypergeometricCalculator() {
                 <div>
                   <CardTitle className="text-gold-foreground text-lg">{t("results_title")}</CardTitle>
                   <CardDescription className="text-gold-foreground/80">
-                    {t("results_desc", { label: spec.label, size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
+                    {t("results_desc_multi", { label: spec.label, size: deckSize, turns })}
                   </CardDescription>
                 </div>
                 <div className="flex gap-2" data-export-hide>
