@@ -491,15 +491,15 @@ function HypergeometricCalculator() {
     try {
       const parsed = parseTextDecklist(text);
       if (parsed.mainCount === 0) {
-        toast.error("Nenhuma carta identificada na decklist.");
+        toast.error(t("import_no_cards"));
         return;
       }
       setParsedCards(parsed.main);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
-      toast.success(`Decklist importada: ${parsed.mainCount} cartas no main deck.`);
+      toast.success(t("import_success", { n: parsed.mainCount }));
     } catch (e) {
-      toast.error("Não foi possível interpretar a decklist.");
+      toast.error(t("import_parse_fail"));
       console.error(e);
     }
   };
@@ -512,12 +512,12 @@ function HypergeometricCalculator() {
       const resolved = cards.map((c) => (c.id && names[c.id] ? { ...c, name: names[c.id] } : c));
       const unresolved = cards.filter((c) => c.id && !names[c.id]).length;
       if (unresolved > 0) {
-        toast.warning(`${unresolved} carta(s) sem nome resolvido — mantidas como "Card #ID".`);
+        toast.warning(t("import_unresolved", { n: unresolved }));
       }
       return resolved;
     } catch (e) {
       console.error(e);
-      toast.warning("Não consegui resolver os nomes das cartas online. Mostrando IDs.");
+      toast.warning(t("import_resolve_fail"));
       return cards;
     }
   };
@@ -530,7 +530,7 @@ function HypergeometricCalculator() {
       setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
-      toast.success(`Link ydke importado: ${parsed.mainCount} cartas no main deck.`);
+      toast.success(t("import_ydke_success", { n: parsed.mainCount }));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -547,9 +547,9 @@ function HypergeometricCalculator() {
       setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
-      toast.success(`Arquivo .ydk importado: ${parsed.mainCount} cartas no main deck.`);
+      toast.success(t("import_ydk_success", { n: parsed.mainCount }));
     } catch (e) {
-      toast.error("Falha ao ler o arquivo .ydk.");
+      toast.error(t("import_ydk_fail"));
       console.error(e);
     } finally {
       setImporting(false);
@@ -561,7 +561,7 @@ function HypergeometricCalculator() {
     setCardAssignments({});
     setPasteText("");
     setYdkeUrl("");
-    toast.info("Importação limpa.");
+    toast.info(t("cleared"));
   };
 
   const updateCategory = (id: string, patch: Partial<Category>) =>
