@@ -1433,10 +1433,10 @@ function HypergeometricCalculator() {
                           }
                         >
                           <SelectTrigger className="w-[180px] h-8 text-xs">
-                            <SelectValue placeholder="Categoria..." />
+                            <SelectValue placeholder={t("category_placeholder")} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__none__">— nenhuma —</SelectItem>
+                            <SelectItem value="__none__">{t("none_cat")}</SelectItem>
                             {categories.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.name}
