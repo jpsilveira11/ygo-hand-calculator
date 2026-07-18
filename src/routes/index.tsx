@@ -958,11 +958,13 @@ function HypergeometricCalculator() {
     const state: ShareState = {
       fmt: formatOption,
       size: deckSize,
+      turns,
       cats: categories.map((c) => ({
         name: c.name,
         count: effectiveCount(c),
         mode: c.mode,
         value: c.value,
+        valueMax: c.valueMax,
         include: c.include,
       })),
       combos: combos.map((cb) => ({
@@ -971,6 +973,7 @@ function HypergeometricCalculator() {
           catIdx: categories.findIndex((c) => c.id === e.categoryId),
           mode: e.mode,
           value: e.value,
+          valueMax: e.valueMax,
         })),
       })),
       presets,
