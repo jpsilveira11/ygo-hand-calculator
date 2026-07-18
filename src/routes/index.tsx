@@ -598,7 +598,7 @@ function HypergeometricCalculator() {
   // -------------------- Probability --------------------
 
   const included = categories.filter((c) => c.include);
-  const maxHandSize = Math.max(spec.turn1Hand, spec.turn2Hand);
+  const maxHandSize = hands.reduce((m, h) => Math.max(m, h.size), 0);
 
   const fullConstraints: CategoryConstraint[] = categories.map((c) =>
     catToConstraint(c, effectiveCount(c)),
@@ -610,26 +610,36 @@ function HypergeometricCalculator() {
 
     if (deckSize < spec.min || deckSize > spec.max) {
       warnings.push(
-        `Deck com ${deckSize} cartas está fora da faixa do formato ${spec.label} (${spec.min}–${spec.max}).`,
+        t("warn_deck_range", { size: deckSize, label: spec.label, min: spec.min, max: spec.max }),
       );
     }
     if (hasImportedCards && importedTotal !== deckSize) {
-      warnings.push(
-        `Decklist importada tem ${importedTotal} cartas, mas o tamanho do deck está em ${deckSize}.`,
-      );
+      warnings.push(t("warn_import_mismatch", { imp: importedTotal, size: deckSize }));
     }
     if (totalCategorized > deckSize) {
-      errors.push(
-        `Soma das categorias (${totalCategorized}) excede o tamanho do deck (${deckSize}).`,
-      );
+      errors.push(t("err_sum_exceeds", { total: totalCategorized, size: deckSize }));
     }
     for (const c of included) {
       const size = effectiveCount(c);
       if (c.mode !== "atMost" && c.value > size) {
-        errors.push(`"${c.name}": ${modeLabel(c.mode)} ${c.value} > cartas disponíveis (${size}).`);
+        errors.push(
+          t("err_value_exceeds_size", {
+            name: c.name,
+            mode: modeLabel(c.mode),
+            value: c.value,
+            size,
+          }),
+        );
       }
       if (c.value > maxHandSize) {
-        errors.push(`"${c.name}": ${modeLabel(c.mode)} ${c.value} > tamanho da mão (${maxHandSize}).`);
+        errors.push(
+          t("err_value_exceeds_hand", {
+            name: c.name,
+            mode: modeLabel(c.mode),
+            value: c.value,
+            hand: maxHandSize,
+          }),
+        );
       }
     }
     return { errors, warnings };
@@ -643,6 +653,7 @@ function HypergeometricCalculator() {
     importedTotal,
     totalCategorized,
     included,
+    t,
   ]);
 
   const canCompute = validation.errors.length === 0 && included.length > 0;
