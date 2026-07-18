@@ -1349,7 +1349,7 @@ function HypergeometricCalculator() {
 
                 <TabsContent value="paste" className="space-y-3 pt-3">
                   <Textarea
-                    placeholder={`Monster:\n3x Ash Blossom & Joyous Spring\n...\n\nSpell:\n1x Called by the Grave\n...`}
+                    placeholder={t("paste_placeholder")}
                     rows={8}
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
