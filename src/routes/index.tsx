@@ -239,8 +239,19 @@ function forcedMinValue(mode: Mode, value: number): number {
 interface ShareState {
   fmt: FormatOption;
   size: number;
-  cats: { name: string; count: number; mode: Mode; value: number; include: boolean }[];
-  combos: { name: string; entries: { catIdx: number; mode: Mode; value: number }[] }[];
+  turns?: number;
+  cats: {
+    name: string;
+    count: number;
+    mode: Mode;
+    value: number;
+    valueMax?: number;
+    include: boolean;
+  }[];
+  combos: {
+    name: string;
+    entries: { catIdx: number; mode: Mode; value: number; valueMax?: number }[];
+  }[];
   presets?: Preset[];
   lang?: Lang;
 }
