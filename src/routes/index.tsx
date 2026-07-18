@@ -405,6 +405,7 @@ function HypergeometricCalculator() {
       count: c.count,
       mode: c.mode,
       value: c.value,
+      valueMax: c.valueMax,
       include: c.include,
     }));
     const newCombos: Combo[] = state.combos.map((cb) => ({
@@ -416,10 +417,14 @@ function HypergeometricCalculator() {
           categoryId: newCats[e.catIdx].id,
           mode: e.mode,
           value: e.value,
+          valueMax: e.valueMax,
         })),
     }));
     setFormatOption(state.fmt);
     setDeckSize(state.size);
+    if (typeof state.turns === "number" && state.turns >= 1 && state.turns <= 10) {
+      setTurns(Math.floor(state.turns));
+    }
     setCategories(newCats);
     setCombos(newCombos);
     if (state.lang === "pt" || state.lang === "en" || state.lang === "es") setLang(state.lang);
