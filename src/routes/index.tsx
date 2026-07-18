@@ -1714,17 +1714,23 @@ function HypergeometricCalculator() {
                           value={entry.mode}
                           onValueChange={(v) => {
                             const entries = [...combo.entries];
-                            entries[i] = { ...entry, mode: v as Mode };
+                            const nextMode = v as Mode;
+                            const next: ComboEntry = { ...entry, mode: nextMode };
+                            if (nextMode === "between" && (next.valueMax === undefined || next.valueMax < next.value)) {
+                              next.valueMax = next.value;
+                            }
+                            entries[i] = next;
                             updateCombo(combo.id, { entries });
                           }}
                         >
-                          <SelectTrigger className="h-8 w-[70px] text-xs">
+                          <SelectTrigger className="h-8 w-[80px] text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="atLeast">≥</SelectItem>
                             <SelectItem value="exactly">=</SelectItem>
                             <SelectItem value="atMost">≤</SelectItem>
+                            <SelectItem value="between">≥ ≤</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
@@ -1737,8 +1743,22 @@ function HypergeometricCalculator() {
                             entries[i] = { ...entry, value: Math.max(0, Number(e.target.value) || 0) };
                             updateCombo(combo.id, { entries });
                           }}
-                          className="h-8 w-16"
+                          className="h-8 w-14"
                         />
+                        {entry.mode === "between" && (
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxHandSize}
+                            value={entry.valueMax ?? entry.value}
+                            onChange={(e) => {
+                              const entries = [...combo.entries];
+                              entries[i] = { ...entry, valueMax: Math.max(0, Number(e.target.value) || 0) };
+                              updateCombo(combo.id, { entries });
+                            }}
+                            className="h-8 w-14"
+                          />
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
