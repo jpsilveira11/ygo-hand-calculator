@@ -120,6 +120,20 @@ const pt: Dict = {
   preset_loaded_missing: 'Preset "{name}" carregado; {n} entrada(s) ignorada(s) (categoria ausente).',
   preset_removed: 'Preset "{name}" removido.',
   cleared: "Importação limpa.",
+
+  warn_deck_range: "Deck com {size} cartas está fora da faixa do formato {label} ({min}–{max}).",
+  warn_import_mismatch: "Decklist importada tem {imp} cartas, mas o tamanho do deck está em {size}.",
+  err_sum_exceeds: "Soma das categorias ({total}) excede o tamanho do deck ({size}).",
+  err_value_exceeds_size: '"{name}": {mode} {value} > cartas disponíveis ({size}).',
+  err_value_exceeds_hand: '"{name}": {mode} {value} > tamanho da mão ({hand}).',
+  import_no_cards: "Nenhuma carta identificada na decklist.",
+  import_success: "Decklist importada: {n} cartas no main deck.",
+  import_parse_fail: "Não foi possível interpretar a decklist.",
+  import_unresolved: '{n} carta(s) sem nome resolvido — mantidas como "Card #ID".',
+  import_resolve_fail: "Não consegui resolver os nomes das cartas online. Mostrando IDs.",
+  import_ydke_success: "Link ydke importado: {n} cartas no main deck.",
+  import_ydk_success: "Arquivo .ydk importado: {n} cartas no main deck.",
+  import_ydk_fail: "Falha ao ler o arquivo .ydk.",
 };
 
 const en: Dict = {
