@@ -1159,7 +1159,7 @@ function HypergeometricCalculator() {
           <div className="flex items-center gap-2 flex-wrap">
             <Badge className="bg-gold font-medium">{spec.label}</Badge>
             <Badge variant="secondary">
-              {t("deck_badge", { size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
+              {t("deck_badge_multi", { size: deckSize, turns })}
             </Badge>
             <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title={t("share_title")}>
               <Share2 className="w-4 h-4" /> {t("share")}
