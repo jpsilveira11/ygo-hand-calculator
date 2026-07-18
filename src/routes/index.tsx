@@ -738,38 +738,43 @@ function HypergeometricCalculator() {
   // -------------------- Chart data --------------------
 
   const chartData = useMemo(() => {
-    const rows: {
-      label: string;
-      T1: number;
-      T2: number;
-      kind: string;
-      T1frac: string;
-      T2frac: string;
-    }[] = [];
     const fracOrDash = (r: { numerator: bigint; denominator: bigint } | null) =>
       r ? formatFraction(r.numerator, r.denominator) : "—";
-    for (const p of perCategoryResults) {
-      rows.push({
-        label: p.cat.name,
-        kind: t("categorized"),
-        T1: p.byTurn[0].res ? +(p.byTurn[0].res.probability * 100).toFixed(2) : 0,
-        T2: p.byTurn[1].res ? +(p.byTurn[1].res.probability * 100).toFixed(2) : 0,
-        T1frac: fracOrDash(p.byTurn[0].res),
-        T2frac: fracOrDash(p.byTurn[1].res),
-      });
-    }
-    for (const cr of comboResults) {
-      rows.push({
-        label: cr.combo.name,
-        kind: "Combo",
-        T1: cr.valid && cr.byTurn[0].res ? +(cr.byTurn[0].res.probability * 100).toFixed(2) : 0,
-        T2: cr.valid && cr.byTurn[1].res ? +(cr.byTurn[1].res.probability * 100).toFixed(2) : 0,
-        T1frac: cr.valid ? fracOrDash(cr.byTurn[0].res) : "—",
-        T2frac: cr.valid ? fracOrDash(cr.byTurn[1].res) : "—",
-      });
-    }
+    const rows: Array<Record<string, string | number>> = [];
+    const pushRow = (
+      label: string,
+      kind: string,
+      byTurn: { turn: number; res: ReturnType<typeof multivariateProbability> | null }[],
+    ) => {
+      const row: Record<string, string | number> = { label, kind };
+      for (const bt of byTurn) {
+        row[`T${bt.turn}`] = bt.res ? +(bt.res.probability * 100).toFixed(2) : 0;
+        row[`T${bt.turn}frac`] = fracOrDash(bt.res);
+      }
+      rows.push(row);
+    };
+    for (const p of perCategoryResults) pushRow(p.cat.name, t("categorized"), p.byTurn);
+    for (const cr of comboResults)
+      pushRow(
+        cr.combo.name,
+        "Combo",
+        cr.byTurn.map((bt) => ({ turn: bt.turn, res: cr.valid ? bt.res : null })),
+      );
     return rows;
   }, [perCategoryResults, comboResults, t]);
+
+  const turnColors = [
+    "var(--gold)",
+    "var(--accent)",
+    "hsl(200 80% 55%)",
+    "hsl(320 70% 60%)",
+    "hsl(140 60% 50%)",
+    "hsl(30 90% 60%)",
+    "hsl(260 70% 65%)",
+    "hsl(0 70% 60%)",
+    "hsl(170 60% 45%)",
+    "hsl(50 90% 55%)",
+  ];
 
   // -------------------- Presets --------------------
 
