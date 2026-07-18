@@ -123,7 +123,7 @@ function detectFormat(deckSize: number): FormatKey {
 
 // -------------------- Types --------------------
 
-type Mode = "atLeast" | "exactly" | "atMost";
+type Mode = "atLeast" | "exactly" | "atMost" | "between";
 
 interface Category {
   id: string;
@@ -131,6 +131,7 @@ interface Category {
   count: number; // manual count if no import
   mode: Mode;
   value: number;
+  valueMax?: number; // upper bound (used by "between", optional for "atLeast")
   include: boolean;
 }
 
@@ -138,6 +139,7 @@ interface ComboEntry {
   categoryId: string;
   mode: Mode;
   value: number;
+  valueMax?: number;
 }
 interface Combo {
   id: string;
@@ -147,7 +149,10 @@ interface Combo {
 
 interface Preset {
   name: string;
-  combos: { name: string; entries: { catName: string; mode: Mode; value: number }[] }[];
+  combos: {
+    name: string;
+    entries: { catName: string; mode: Mode; value: number; valueMax?: number }[];
+  }[];
 }
 
 let catIdCounter = 0;
@@ -169,42 +174,84 @@ function makeDefaultCategories(format: FormatKey): Category[] {
   });
 }
 
+// Cards seen at the START of the given turn (i.e. total cards drawn so far).
+// For Rush turns >= 2 we assume the entire previous hand was played and the
+// player drew back up to 5, so newly-seen cards per turn = 5.
+function cardsSeenAtTurn(fmt: FormatKey, turn: number): number {
+  if (turn <= 0) return 0;
+  if (fmt === "master") return 4 + turn; // 5,6,7,...
+  if (fmt === "speed") return 3 + turn; // 4,5,6,...
+  // rush
+  return 5 * turn; // 5,10,15,...
+}
+
 // Turn a Category into a CategoryConstraint for the hypergeometric engine.
 function catToConstraint(c: Category, effectiveSize: number): CategoryConstraint {
   const size = effectiveSize;
   if (!c.include) return { size, min: 0 };
   switch (c.mode) {
     case "atLeast":
-      return { size, min: c.value };
+      return typeof c.valueMax === "number"
+        ? { size, min: c.value, max: c.valueMax }
+        : { size, min: c.value };
     case "exactly":
       return { size, min: c.value, max: c.value };
     case "atMost":
       return { size, min: 0, max: c.value };
+    case "between": {
+      const lo = Math.min(c.value, c.valueMax ?? c.value);
+      const hi = Math.max(c.value, c.valueMax ?? c.value);
+      return { size, min: lo, max: hi };
+    }
   }
 }
 
 function entryToConstraint(entry: ComboEntry, size: number): CategoryConstraint {
   switch (entry.mode) {
     case "atLeast":
-      return { size, min: entry.value };
+      return typeof entry.valueMax === "number"
+        ? { size, min: entry.value, max: entry.valueMax }
+        : { size, min: entry.value };
     case "exactly":
       return { size, min: entry.value, max: entry.value };
     case "atMost":
       return { size, min: 0, max: entry.value };
+    case "between": {
+      const lo = Math.min(entry.value, entry.valueMax ?? entry.value);
+      const hi = Math.max(entry.value, entry.valueMax ?? entry.value);
+      return { size, min: lo, max: hi };
+    }
   }
 }
 
 function modeLabel(m: Mode): string {
-  return m === "atLeast" ? "≥" : m === "exactly" ? "=" : "≤";
+  return m === "atLeast" ? "≥" : m === "exactly" ? "=" : m === "atMost" ? "≤" : "↔";
 }
+
+function forcedMinValue(mode: Mode, value: number): number {
+  // Sum used for feasibility check (min forced picks in hand).
+  return mode === "atMost" ? 0 : value;
+}
+
 
 // -------------------- Share encoding --------------------
 
 interface ShareState {
   fmt: FormatOption;
   size: number;
-  cats: { name: string; count: number; mode: Mode; value: number; include: boolean }[];
-  combos: { name: string; entries: { catIdx: number; mode: Mode; value: number }[] }[];
+  turns?: number;
+  cats: {
+    name: string;
+    count: number;
+    mode: Mode;
+    value: number;
+    valueMax?: number;
+    include: boolean;
+  }[];
+  combos: {
+    name: string;
+    entries: { catIdx: number; mode: Mode; value: number; valueMax?: number }[];
+  }[];
   presets?: Preset[];
   lang?: Lang;
 }
@@ -236,6 +283,7 @@ function HypergeometricCalculator() {
   const [deckSize, setDeckSize] = useState<number>(40);
   const [categories, setCategories] = useState<Category[]>(() => makeDefaultCategories("master"));
   const [combos, setCombos] = useState<Combo[]>([]);
+  const [turns, setTurns] = useState<number>(2);
 
   const [parsedCards, setParsedCards] = useState<ParsedCard[]>([]);
   const [cardAssignments, setCardAssignments] = useState<Record<number, string>>({});
@@ -357,6 +405,7 @@ function HypergeometricCalculator() {
       count: c.count,
       mode: c.mode,
       value: c.value,
+      valueMax: c.valueMax,
       include: c.include,
     }));
     const newCombos: Combo[] = state.combos.map((cb) => ({
@@ -368,10 +417,14 @@ function HypergeometricCalculator() {
           categoryId: newCats[e.catIdx].id,
           mode: e.mode,
           value: e.value,
+          valueMax: e.valueMax,
         })),
     }));
     setFormatOption(state.fmt);
     setDeckSize(state.size);
+    if (typeof state.turns === "number" && state.turns >= 1 && state.turns <= 10) {
+      setTurns(Math.floor(state.turns));
+    }
     setCategories(newCats);
     setCombos(newCombos);
     if (state.lang === "pt" || state.lang === "en" || state.lang === "es") setLang(state.lang);
@@ -394,10 +447,14 @@ function HypergeometricCalculator() {
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
   const spec = FORMATS[activeFormatKey];
-  const hands: { turn: 1 | 2; size: number }[] = [
-    { turn: 1, size: spec.turn1Hand },
-    { turn: 2, size: spec.turn2Hand },
-  ];
+  const hands: { turn: number; size: number }[] = useMemo(
+    () =>
+      Array.from({ length: Math.max(1, Math.min(10, turns)) }, (_, i) => ({
+        turn: i + 1,
+        size: cardsSeenAtTurn(activeFormatKey, i + 1),
+      })),
+    [activeFormatKey, turns],
+  );
 
   const derivedCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -434,15 +491,15 @@ function HypergeometricCalculator() {
     try {
       const parsed = parseTextDecklist(text);
       if (parsed.mainCount === 0) {
-        toast.error("Nenhuma carta identificada na decklist.");
+        toast.error(t("import_no_cards"));
         return;
       }
       setParsedCards(parsed.main);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
-      toast.success(`Decklist importada: ${parsed.mainCount} cartas no main deck.`);
+      toast.success(t("import_success", { n: parsed.mainCount }));
     } catch (e) {
-      toast.error("Não foi possível interpretar a decklist.");
+      toast.error(t("import_parse_fail"));
       console.error(e);
     }
   };
@@ -455,12 +512,12 @@ function HypergeometricCalculator() {
       const resolved = cards.map((c) => (c.id && names[c.id] ? { ...c, name: names[c.id] } : c));
       const unresolved = cards.filter((c) => c.id && !names[c.id]).length;
       if (unresolved > 0) {
-        toast.warning(`${unresolved} carta(s) sem nome resolvido — mantidas como "Card #ID".`);
+        toast.warning(t("import_unresolved", { n: unresolved }));
       }
       return resolved;
     } catch (e) {
       console.error(e);
-      toast.warning("Não consegui resolver os nomes das cartas online. Mostrando IDs.");
+      toast.warning(t("import_resolve_fail"));
       return cards;
     }
   };
@@ -473,7 +530,7 @@ function HypergeometricCalculator() {
       setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
-      toast.success(`Link ydke importado: ${parsed.mainCount} cartas no main deck.`);
+      toast.success(t("import_ydke_success", { n: parsed.mainCount }));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -490,9 +547,9 @@ function HypergeometricCalculator() {
       setParsedCards(enriched);
       setCardAssignments({});
       setDeckSize(parsed.mainCount);
-      toast.success(`Arquivo .ydk importado: ${parsed.mainCount} cartas no main deck.`);
+      toast.success(t("import_ydk_success", { n: parsed.mainCount }));
     } catch (e) {
-      toast.error("Falha ao ler o arquivo .ydk.");
+      toast.error(t("import_ydk_fail"));
       console.error(e);
     } finally {
       setImporting(false);
@@ -504,7 +561,7 @@ function HypergeometricCalculator() {
     setCardAssignments({});
     setPasteText("");
     setYdkeUrl("");
-    toast.info("Importação limpa.");
+    toast.info(t("cleared"));
   };
 
   const updateCategory = (id: string, patch: Partial<Category>) =>
@@ -541,7 +598,7 @@ function HypergeometricCalculator() {
   // -------------------- Probability --------------------
 
   const included = categories.filter((c) => c.include);
-  const maxHandSize = Math.max(spec.turn1Hand, spec.turn2Hand);
+  const maxHandSize = hands.reduce((m, h) => Math.max(m, h.size), 0);
 
   const fullConstraints: CategoryConstraint[] = categories.map((c) =>
     catToConstraint(c, effectiveCount(c)),
@@ -553,26 +610,36 @@ function HypergeometricCalculator() {
 
     if (deckSize < spec.min || deckSize > spec.max) {
       warnings.push(
-        `Deck com ${deckSize} cartas está fora da faixa do formato ${spec.label} (${spec.min}–${spec.max}).`,
+        t("warn_deck_range", { size: deckSize, label: spec.label, min: spec.min, max: spec.max }),
       );
     }
     if (hasImportedCards && importedTotal !== deckSize) {
-      warnings.push(
-        `Decklist importada tem ${importedTotal} cartas, mas o tamanho do deck está em ${deckSize}.`,
-      );
+      warnings.push(t("warn_import_mismatch", { imp: importedTotal, size: deckSize }));
     }
     if (totalCategorized > deckSize) {
-      errors.push(
-        `Soma das categorias (${totalCategorized}) excede o tamanho do deck (${deckSize}).`,
-      );
+      errors.push(t("err_sum_exceeds", { total: totalCategorized, size: deckSize }));
     }
     for (const c of included) {
       const size = effectiveCount(c);
       if (c.mode !== "atMost" && c.value > size) {
-        errors.push(`"${c.name}": ${modeLabel(c.mode)} ${c.value} > cartas disponíveis (${size}).`);
+        errors.push(
+          t("err_value_exceeds_size", {
+            name: c.name,
+            mode: modeLabel(c.mode),
+            value: c.value,
+            size,
+          }),
+        );
       }
       if (c.value > maxHandSize) {
-        errors.push(`"${c.name}": ${modeLabel(c.mode)} ${c.value} > tamanho da mão (${maxHandSize}).`);
+        errors.push(
+          t("err_value_exceeds_hand", {
+            name: c.name,
+            mode: modeLabel(c.mode),
+            value: c.value,
+            hand: maxHandSize,
+          }),
+        );
       }
     }
     return { errors, warnings };
@@ -586,6 +653,7 @@ function HypergeometricCalculator() {
     importedTotal,
     totalCategorized,
     included,
+    t,
   ]);
 
   const canCompute = validation.errors.length === 0 && included.length > 0;
@@ -622,14 +690,19 @@ function HypergeometricCalculator() {
         const size = effectiveCount(cat);
         if (e.value < 0) return false;
         if (e.mode !== "atMost" && e.value > size) return false;
+        if (e.mode === "between") {
+          const hi = e.valueMax ?? e.value;
+          if (hi < e.value) return false;
+          if (hi > size) return false;
+        }
         return true;
       });
     const byTurn = hands.map(({ turn, size: hs }) => {
       if (!valid)
         return { turn, handSize: hs, res: null as ReturnType<typeof multivariateProbability> | null };
-      // Minimum forced picks (atLeast/exactly) sum
+      // Minimum forced picks (atLeast/exactly/between) sum
       const forcedMin = combo.entries.reduce(
-        (s, e) => s + (e.mode === "atMost" ? 0 : e.value),
+        (s, e) => s + forcedMinValue(e.mode, e.value),
         0,
       );
       if (forcedMin > hs) return { turn, handSize: hs, res: null };
@@ -665,38 +738,43 @@ function HypergeometricCalculator() {
   // -------------------- Chart data --------------------
 
   const chartData = useMemo(() => {
-    const rows: {
-      label: string;
-      T1: number;
-      T2: number;
-      kind: string;
-      T1frac: string;
-      T2frac: string;
-    }[] = [];
     const fracOrDash = (r: { numerator: bigint; denominator: bigint } | null) =>
       r ? formatFraction(r.numerator, r.denominator) : "—";
-    for (const p of perCategoryResults) {
-      rows.push({
-        label: p.cat.name,
-        kind: t("categorized"),
-        T1: p.byTurn[0].res ? +(p.byTurn[0].res.probability * 100).toFixed(2) : 0,
-        T2: p.byTurn[1].res ? +(p.byTurn[1].res.probability * 100).toFixed(2) : 0,
-        T1frac: fracOrDash(p.byTurn[0].res),
-        T2frac: fracOrDash(p.byTurn[1].res),
-      });
-    }
-    for (const cr of comboResults) {
-      rows.push({
-        label: cr.combo.name,
-        kind: "Combo",
-        T1: cr.valid && cr.byTurn[0].res ? +(cr.byTurn[0].res.probability * 100).toFixed(2) : 0,
-        T2: cr.valid && cr.byTurn[1].res ? +(cr.byTurn[1].res.probability * 100).toFixed(2) : 0,
-        T1frac: cr.valid ? fracOrDash(cr.byTurn[0].res) : "—",
-        T2frac: cr.valid ? fracOrDash(cr.byTurn[1].res) : "—",
-      });
-    }
+    const rows: Array<Record<string, string | number>> = [];
+    const pushRow = (
+      label: string,
+      kind: string,
+      byTurn: { turn: number; res: ReturnType<typeof multivariateProbability> | null }[],
+    ) => {
+      const row: Record<string, string | number> = { label, kind };
+      for (const bt of byTurn) {
+        row[`T${bt.turn}`] = bt.res ? +(bt.res.probability * 100).toFixed(2) : 0;
+        row[`T${bt.turn}frac`] = fracOrDash(bt.res);
+      }
+      rows.push(row);
+    };
+    for (const p of perCategoryResults) pushRow(p.cat.name, t("categorized"), p.byTurn);
+    for (const cr of comboResults)
+      pushRow(
+        cr.combo.name,
+        "Combo",
+        cr.byTurn.map((bt) => ({ turn: bt.turn, res: cr.valid ? bt.res : null })),
+      );
     return rows;
   }, [perCategoryResults, comboResults, t]);
+
+  const turnColors = [
+    "var(--gold)",
+    "var(--accent)",
+    "hsl(200 80% 55%)",
+    "hsl(320 70% 60%)",
+    "hsl(140 60% 50%)",
+    "hsl(30 90% 60%)",
+    "hsl(260 70% 65%)",
+    "hsl(0 70% 60%)",
+    "hsl(170 60% 45%)",
+    "hsl(50 90% 55%)",
+  ];
 
   // -------------------- Presets --------------------
 
@@ -719,6 +797,7 @@ function HypergeometricCalculator() {
           catName: catById.get(e.categoryId)?.name ?? "?",
           mode: e.mode,
           value: e.value,
+          valueMax: e.valueMax,
         })),
       })),
     };
@@ -735,10 +814,12 @@ function HypergeometricCalculator() {
       id: nextComboId(),
       name: cb.name,
       entries: cb.entries
-        .map((e) => {
+        .map((e): ComboEntry | null => {
           const cat = byName.get(e.catName.toLowerCase());
           if (!cat) return null;
-          return { categoryId: cat.id, mode: e.mode, value: e.value };
+          const out: ComboEntry = { categoryId: cat.id, mode: e.mode, value: e.value };
+          if (typeof e.valueMax === "number") out.valueMax = e.valueMax;
+          return out;
         })
         .filter((v): v is ComboEntry => v !== null),
     }));
@@ -843,13 +924,20 @@ function HypergeometricCalculator() {
           }
           const e = rawE as Record<string, unknown>;
           if (typeof e.catName !== "string") { errors.push(`${ep}.catName: string obrigatória.`); entriesOk = false; return; }
-          if (e.mode !== "atLeast" && e.mode !== "exactly" && e.mode !== "atMost") {
-            errors.push(`${ep}.mode: deve ser "atLeast" | "exactly" | "atMost".`); entriesOk = false; return;
+          if (e.mode !== "atLeast" && e.mode !== "exactly" && e.mode !== "atMost" && e.mode !== "between") {
+            errors.push(`${ep}.mode: deve ser "atLeast" | "exactly" | "atMost" | "between".`); entriesOk = false; return;
           }
           if (typeof e.value !== "number" || !Number.isFinite(e.value) || e.value < 0) {
             errors.push(`${ep}.value: número >= 0 obrigatório.`); entriesOk = false; return;
           }
-          entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value });
+          let valueMax: number | undefined = undefined;
+          if (e.valueMax !== undefined && e.valueMax !== null) {
+            if (typeof e.valueMax !== "number" || !Number.isFinite(e.valueMax) || e.valueMax < 0) {
+              errors.push(`${ep}.valueMax: número >= 0 quando presente.`); entriesOk = false; return;
+            }
+            valueMax = e.valueMax;
+          }
+          entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value, valueMax });
         });
         if (entriesOk) combosOut.push({ name: cb.name, entries: entriesOut });
         else comboOk = false;
@@ -878,11 +966,13 @@ function HypergeometricCalculator() {
     const state: ShareState = {
       fmt: formatOption,
       size: deckSize,
+      turns,
       cats: categories.map((c) => ({
         name: c.name,
         count: effectiveCount(c),
         mode: c.mode,
         value: c.value,
+        valueMax: c.valueMax,
         include: c.include,
       })),
       combos: combos.map((cb) => ({
@@ -891,6 +981,7 @@ function HypergeometricCalculator() {
           catIdx: categories.findIndex((c) => c.id === e.categoryId),
           mode: e.mode,
           value: e.value,
+          valueMax: e.valueMax,
         })),
       })),
       presets,
@@ -1068,13 +1159,13 @@ function HypergeometricCalculator() {
           <div className="flex items-center gap-2 flex-wrap">
             <Badge className="bg-gold font-medium">{spec.label}</Badge>
             <Badge variant="secondary">
-              {t("deck_badge", { size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
+              {t("deck_badge_multi", { size: deckSize, turns })}
             </Badge>
             <Button size="sm" variant="outline" onClick={copyShareLink} className="gap-2" title={t("share_title")}>
               <Share2 className="w-4 h-4" /> {t("share")}
             </Button>
-            <Button size="sm" variant="outline" onClick={copyShortShareLink} className="gap-2" title="Copiar link curto (is.gd/tinyurl)">
-              <Share2 className="w-4 h-4" /> Link curto
+            <Button size="sm" variant="outline" onClick={copyShortShareLink} className="gap-2" title={t("short_link_title")}>
+              <Share2 className="w-4 h-4" /> {t("short_link")}
             </Button>
             <Select value={lang} onValueChange={(v) => setLang(v as Lang)}>
               <SelectTrigger className="w-[140px] h-9" aria-label={t("language")}>
@@ -1139,6 +1230,19 @@ function HypergeometricCalculator() {
                     onChange={(e) => setDeckSize(Math.max(1, Number(e.target.value) || 0))}
                   />
                 </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>{t("turns_label")}</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={turns}
+                    onChange={(e) =>
+                      setTurns(Math.max(1, Math.min(10, Number(e.target.value) || 1)))
+                    }
+                  />
+                  <p className="text-[11px] text-muted-foreground">{t("turns_hint")}</p>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
                 {t("format_range_hint", {
@@ -1147,6 +1251,9 @@ function HypergeometricCalculator() {
                   cats: spec.categories.join(", "),
                 })}
               </p>
+              {activeFormatKey === "rush" && (
+                <p className="text-[11px] text-gold/80">{t("rush_note")}</p>
+              )}
             </CardContent>
           </Card>
 
@@ -1247,7 +1354,7 @@ function HypergeometricCalculator() {
 
                 <TabsContent value="paste" className="space-y-3 pt-3">
                   <Textarea
-                    placeholder={`Monster:\n3x Ash Blossom & Joyous Spring\n...\n\nSpell:\n1x Called by the Grave\n...`}
+                    placeholder={t("paste_placeholder")}
                     rows={8}
                     value={pasteText}
                     onChange={(e) => setPasteText(e.target.value)}
@@ -1331,10 +1438,10 @@ function HypergeometricCalculator() {
                           }
                         >
                           <SelectTrigger className="w-[180px] h-8 text-xs">
-                            <SelectValue placeholder="Categoria..." />
+                            <SelectValue placeholder={t("category_placeholder")} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__none__">— nenhuma —</SelectItem>
+                            <SelectItem value="__none__">{t("none_cat")}</SelectItem>
                             {categories.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.name}
@@ -1392,7 +1499,7 @@ function HypergeometricCalculator() {
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className={`grid gap-2 ${c.mode === "between" ? "grid-cols-4" : "grid-cols-3"}`}>
                       <div>
                         <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
                         <Input
@@ -1410,7 +1517,14 @@ function HypergeometricCalculator() {
                         <Label className="text-xs text-muted-foreground">{t("mode")}</Label>
                         <Select
                           value={c.mode}
-                          onValueChange={(v) => updateCategory(c.id, { mode: v as Mode })}
+                          onValueChange={(v) => {
+                            const nextMode = v as Mode;
+                            const patch: Partial<Category> = { mode: nextMode };
+                            if (nextMode === "between" && (c.valueMax === undefined || c.valueMax < c.value)) {
+                              patch.valueMax = Math.max(c.value, c.value);
+                            }
+                            updateCategory(c.id, patch);
+                          }}
                           disabled={!c.include}
                         >
                           <SelectTrigger className="h-8 text-xs">
@@ -1420,11 +1534,14 @@ function HypergeometricCalculator() {
                             <SelectItem value="atLeast">{t("mode_atleast")}</SelectItem>
                             <SelectItem value="exactly">{t("mode_exactly")}</SelectItem>
                             <SelectItem value="atMost">{t("mode_atmost")}</SelectItem>
+                            <SelectItem value="between">{t("mode_between")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">{t("value")}</Label>
+                        <Label className="text-xs text-muted-foreground">
+                          {c.mode === "between" ? `${t("value")} (min)` : t("value")}
+                        </Label>
                         <Input
                           type="number"
                           min={0}
@@ -1437,6 +1554,24 @@ function HypergeometricCalculator() {
                           disabled={!c.include}
                         />
                       </div>
+                      {c.mode === "between" && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">{t("value_max")}</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxHandSize}
+                            value={c.valueMax ?? c.value}
+                            onChange={(e) =>
+                              updateCategory(c.id, {
+                                valueMax: Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="h-8"
+                            disabled={!c.include}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -1584,17 +1719,23 @@ function HypergeometricCalculator() {
                           value={entry.mode}
                           onValueChange={(v) => {
                             const entries = [...combo.entries];
-                            entries[i] = { ...entry, mode: v as Mode };
+                            const nextMode = v as Mode;
+                            const next: ComboEntry = { ...entry, mode: nextMode };
+                            if (nextMode === "between" && (next.valueMax === undefined || next.valueMax < next.value)) {
+                              next.valueMax = next.value;
+                            }
+                            entries[i] = next;
                             updateCombo(combo.id, { entries });
                           }}
                         >
-                          <SelectTrigger className="h-8 w-[70px] text-xs">
+                          <SelectTrigger className="h-8 w-[80px] text-xs">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="atLeast">≥</SelectItem>
                             <SelectItem value="exactly">=</SelectItem>
                             <SelectItem value="atMost">≤</SelectItem>
+                            <SelectItem value="between">≥ ≤</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
@@ -1607,8 +1748,22 @@ function HypergeometricCalculator() {
                             entries[i] = { ...entry, value: Math.max(0, Number(e.target.value) || 0) };
                             updateCombo(combo.id, { entries });
                           }}
-                          className="h-8 w-16"
+                          className="h-8 w-14"
                         />
+                        {entry.mode === "between" && (
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxHandSize}
+                            value={entry.valueMax ?? entry.value}
+                            onChange={(e) => {
+                              const entries = [...combo.entries];
+                              entries[i] = { ...entry, valueMax: Math.max(0, Number(e.target.value) || 0) };
+                              updateCombo(combo.id, { entries });
+                            }}
+                            className="h-8 w-14"
+                          />
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
@@ -1650,7 +1805,7 @@ function HypergeometricCalculator() {
                 <div>
                   <CardTitle className="text-gold-foreground text-lg">{t("results_title")}</CardTitle>
                   <CardDescription className="text-gold-foreground/80">
-                    {t("results_desc", { label: spec.label, size: deckSize, t1: spec.turn1Hand, t2: spec.turn2Hand })}
+                    {t("results_desc_multi", { label: spec.label, size: deckSize, turns })}
                   </CardDescription>
                 </div>
                 <div className="flex gap-2" data-export-hide>
@@ -1748,14 +1903,7 @@ function HypergeometricCalculator() {
                           }}
                           content={({ active, payload, label }) => {
                             if (!active || !payload || payload.length === 0) return null;
-                            const row = payload[0].payload as {
-                              label: string;
-                              kind: string;
-                              T1: number;
-                              T2: number;
-                              T1frac: string;
-                              T2frac: string;
-                            };
+                            const row = payload[0].payload as Record<string, string | number>;
                             return (
                               <div
                                 style={{
@@ -1770,27 +1918,30 @@ function HypergeometricCalculator() {
                               >
                                 <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
                                 <div style={{ opacity: 0.7, marginBottom: 6 }}>{row.kind}</div>
-                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                                  <span style={{ color: "var(--gold)" }}>T1</span>
-                                  <span>
-                                    <strong>{row.T1}%</strong>{" "}
-                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T1frac}</span>
-                                  </span>
-                                </div>
-                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                                  <span style={{ color: "var(--accent)" }}>T2</span>
-                                  <span>
-                                    <strong>{row.T2}%</strong>{" "}
-                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T2frac}</span>
-                                  </span>
-                                </div>
+                                {hands.map(({ turn }, i) => (
+                                  <div key={turn} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                                    <span style={{ color: turnColors[i % turnColors.length] }}>T{turn}</span>
+                                    <span>
+                                      <strong>{row[`T${turn}`] as number}%</strong>{" "}
+                                      <span style={{ opacity: 0.6, fontFamily: "monospace" }}>
+                                        {row[`T${turn}frac`] as string}
+                                      </span>
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
                             );
                           }}
                         />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="T1" fill="var(--gold)" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="T2" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                        {hands.map(({ turn }, i) => (
+                          <Bar
+                            key={turn}
+                            dataKey={`T${turn}`}
+                            fill={turnColors[i % turnColors.length]}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        ))}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1817,7 +1968,7 @@ function HypergeometricCalculator() {
                               .join(" + ")}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                           {byTurn.map(({ turn, res }) => (
                             <div key={turn} className="flex items-baseline justify-between text-sm">
                               <span className="text-xs text-muted-foreground">T{turn}</span>
@@ -1853,7 +2004,7 @@ function HypergeometricCalculator() {
                         {t("in_deck_short", { n: size })} · {modeLabel(cat.mode)} {cat.value}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                       {byTurn.map(({ turn, res }) => (
                         <div key={turn} className="flex items-baseline justify-between text-xs">
                           <span className="text-muted-foreground">T{turn}</span>
