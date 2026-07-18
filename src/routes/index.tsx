@@ -283,6 +283,7 @@ function HypergeometricCalculator() {
   const [deckSize, setDeckSize] = useState<number>(40);
   const [categories, setCategories] = useState<Category[]>(() => makeDefaultCategories("master"));
   const [combos, setCombos] = useState<Combo[]>([]);
+  const [turns, setTurns] = useState<number>(2);
 
   const [parsedCards, setParsedCards] = useState<ParsedCard[]>([]);
   const [cardAssignments, setCardAssignments] = useState<Record<number, string>>({});
