@@ -792,6 +792,7 @@ function HypergeometricCalculator() {
           catName: catById.get(e.categoryId)?.name ?? "?",
           mode: e.mode,
           value: e.value,
+          valueMax: e.valueMax,
         })),
       })),
     };
