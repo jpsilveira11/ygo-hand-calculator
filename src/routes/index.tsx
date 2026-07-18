@@ -1903,14 +1903,7 @@ function HypergeometricCalculator() {
                           }}
                           content={({ active, payload, label }) => {
                             if (!active || !payload || payload.length === 0) return null;
-                            const row = payload[0].payload as {
-                              label: string;
-                              kind: string;
-                              T1: number;
-                              T2: number;
-                              T1frac: string;
-                              T2frac: string;
-                            };
+                            const row = payload[0].payload as Record<string, string | number>;
                             return (
                               <div
                                 style={{
@@ -1925,27 +1918,30 @@ function HypergeometricCalculator() {
                               >
                                 <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
                                 <div style={{ opacity: 0.7, marginBottom: 6 }}>{row.kind}</div>
-                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                                  <span style={{ color: "var(--gold)" }}>T1</span>
-                                  <span>
-                                    <strong>{row.T1}%</strong>{" "}
-                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T1frac}</span>
-                                  </span>
-                                </div>
-                                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                                  <span style={{ color: "var(--accent)" }}>T2</span>
-                                  <span>
-                                    <strong>{row.T2}%</strong>{" "}
-                                    <span style={{ opacity: 0.6, fontFamily: "monospace" }}>{row.T2frac}</span>
-                                  </span>
-                                </div>
+                                {hands.map(({ turn }, i) => (
+                                  <div key={turn} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                                    <span style={{ color: turnColors[i % turnColors.length] }}>T{turn}</span>
+                                    <span>
+                                      <strong>{row[`T${turn}`] as number}%</strong>{" "}
+                                      <span style={{ opacity: 0.6, fontFamily: "monospace" }}>
+                                        {row[`T${turn}frac`] as string}
+                                      </span>
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
                             );
                           }}
                         />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="T1" fill="var(--gold)" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="T2" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                        {hands.map(({ turn }, i) => (
+                          <Bar
+                            key={turn}
+                            dataKey={`T${turn}`}
+                            fill={turnColors[i % turnColors.length]}
+                            radius={[4, 4, 0, 0]}
+                          />
+                        ))}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
