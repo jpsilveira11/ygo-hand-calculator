@@ -916,13 +916,20 @@ function HypergeometricCalculator() {
           }
           const e = rawE as Record<string, unknown>;
           if (typeof e.catName !== "string") { errors.push(`${ep}.catName: string obrigatória.`); entriesOk = false; return; }
-          if (e.mode !== "atLeast" && e.mode !== "exactly" && e.mode !== "atMost") {
-            errors.push(`${ep}.mode: deve ser "atLeast" | "exactly" | "atMost".`); entriesOk = false; return;
+          if (e.mode !== "atLeast" && e.mode !== "exactly" && e.mode !== "atMost" && e.mode !== "between") {
+            errors.push(`${ep}.mode: deve ser "atLeast" | "exactly" | "atMost" | "between".`); entriesOk = false; return;
           }
           if (typeof e.value !== "number" || !Number.isFinite(e.value) || e.value < 0) {
             errors.push(`${ep}.value: número >= 0 obrigatório.`); entriesOk = false; return;
           }
-          entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value });
+          let valueMax: number | undefined = undefined;
+          if (e.valueMax !== undefined && e.valueMax !== null) {
+            if (typeof e.valueMax !== "number" || !Number.isFinite(e.valueMax) || e.valueMax < 0) {
+              errors.push(`${ep}.valueMax: número >= 0 quando presente.`); entriesOk = false; return;
+            }
+            valueMax = e.valueMax;
+          }
+          entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value, valueMax });
         });
         if (entriesOk) combosOut.push({ name: cb.name, entries: entriesOut });
         else comboOk = false;
