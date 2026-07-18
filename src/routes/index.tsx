@@ -123,7 +123,7 @@ function detectFormat(deckSize: number): FormatKey {
 
 // -------------------- Types --------------------
 
-type Mode = "atLeast" | "exactly" | "atMost";
+type Mode = "atLeast" | "exactly" | "atMost" | "between";
 
 interface Category {
   id: string;
@@ -131,6 +131,7 @@ interface Category {
   count: number; // manual count if no import
   mode: Mode;
   value: number;
+  valueMax?: number; // upper bound (used by "between", optional for "atLeast")
   include: boolean;
 }
 
@@ -138,6 +139,7 @@ interface ComboEntry {
   categoryId: string;
   mode: Mode;
   value: number;
+  valueMax?: number;
 }
 interface Combo {
   id: string;
@@ -147,7 +149,10 @@ interface Combo {
 
 interface Preset {
   name: string;
-  combos: { name: string; entries: { catName: string; mode: Mode; value: number }[] }[];
+  combos: {
+    name: string;
+    entries: { catName: string; mode: Mode; value: number; valueMax?: number }[];
+  }[];
 }
 
 let catIdCounter = 0;
@@ -169,34 +174,65 @@ function makeDefaultCategories(format: FormatKey): Category[] {
   });
 }
 
+// Cards seen at the START of the given turn (i.e. total cards drawn so far).
+// For Rush turns >= 2 we assume the entire previous hand was played and the
+// player drew back up to 5, so newly-seen cards per turn = 5.
+function cardsSeenAtTurn(fmt: FormatKey, turn: number): number {
+  if (turn <= 0) return 0;
+  if (fmt === "master") return 4 + turn; // 5,6,7,...
+  if (fmt === "speed") return 3 + turn; // 4,5,6,...
+  // rush
+  return 5 * turn; // 5,10,15,...
+}
+
 // Turn a Category into a CategoryConstraint for the hypergeometric engine.
 function catToConstraint(c: Category, effectiveSize: number): CategoryConstraint {
   const size = effectiveSize;
   if (!c.include) return { size, min: 0 };
   switch (c.mode) {
     case "atLeast":
-      return { size, min: c.value };
+      return typeof c.valueMax === "number"
+        ? { size, min: c.value, max: c.valueMax }
+        : { size, min: c.value };
     case "exactly":
       return { size, min: c.value, max: c.value };
     case "atMost":
       return { size, min: 0, max: c.value };
+    case "between": {
+      const lo = Math.min(c.value, c.valueMax ?? c.value);
+      const hi = Math.max(c.value, c.valueMax ?? c.value);
+      return { size, min: lo, max: hi };
+    }
   }
 }
 
 function entryToConstraint(entry: ComboEntry, size: number): CategoryConstraint {
   switch (entry.mode) {
     case "atLeast":
-      return { size, min: entry.value };
+      return typeof entry.valueMax === "number"
+        ? { size, min: entry.value, max: entry.valueMax }
+        : { size, min: entry.value };
     case "exactly":
       return { size, min: entry.value, max: entry.value };
     case "atMost":
       return { size, min: 0, max: entry.value };
+    case "between": {
+      const lo = Math.min(entry.value, entry.valueMax ?? entry.value);
+      const hi = Math.max(entry.value, entry.valueMax ?? entry.value);
+      return { size, min: lo, max: hi };
+    }
   }
 }
 
 function modeLabel(m: Mode): string {
-  return m === "atLeast" ? "≥" : m === "exactly" ? "=" : "≤";
+  return m === "atLeast" ? "≥" : m === "exactly" ? "=" : m === "atMost" ? "≤" : "↔";
 }
+
+function forcedMinValue(mode: Mode, value: number): number {
+  // Sum used for feasibility check (min forced picks in hand).
+  return mode === "atMost" ? 0 : value;
+}
+
 
 // -------------------- Share encoding --------------------
 
