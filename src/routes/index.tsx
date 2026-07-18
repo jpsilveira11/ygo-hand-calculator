@@ -1494,7 +1494,7 @@ function HypergeometricCalculator() {
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className={`grid gap-2 ${c.mode === "between" ? "grid-cols-4" : "grid-cols-3"}`}>
                       <div>
                         <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
                         <Input
@@ -1512,7 +1512,14 @@ function HypergeometricCalculator() {
                         <Label className="text-xs text-muted-foreground">{t("mode")}</Label>
                         <Select
                           value={c.mode}
-                          onValueChange={(v) => updateCategory(c.id, { mode: v as Mode })}
+                          onValueChange={(v) => {
+                            const nextMode = v as Mode;
+                            const patch: Partial<Category> = { mode: nextMode };
+                            if (nextMode === "between" && (c.valueMax === undefined || c.valueMax < c.value)) {
+                              patch.valueMax = Math.max(c.value, c.value);
+                            }
+                            updateCategory(c.id, patch);
+                          }}
                           disabled={!c.include}
                         >
                           <SelectTrigger className="h-8 text-xs">
@@ -1522,11 +1529,14 @@ function HypergeometricCalculator() {
                             <SelectItem value="atLeast">{t("mode_atleast")}</SelectItem>
                             <SelectItem value="exactly">{t("mode_exactly")}</SelectItem>
                             <SelectItem value="atMost">{t("mode_atmost")}</SelectItem>
+                            <SelectItem value="between">{t("mode_between")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">{t("value")}</Label>
+                        <Label className="text-xs text-muted-foreground">
+                          {c.mode === "between" ? `${t("value")} (min)` : t("value")}
+                        </Label>
                         <Input
                           type="number"
                           min={0}
@@ -1539,6 +1549,24 @@ function HypergeometricCalculator() {
                           disabled={!c.include}
                         />
                       </div>
+                      {c.mode === "between" && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">{t("value_max")}</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxHandSize}
+                            value={c.valueMax ?? c.value}
+                            onChange={(e) =>
+                              updateCategory(c.id, {
+                                valueMax: Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="h-8"
+                            disabled={!c.include}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
