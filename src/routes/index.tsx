@@ -812,7 +812,7 @@ function HypergeometricCalculator() {
         .map((e) => {
           const cat = byName.get(e.catName.toLowerCase());
           if (!cat) return null;
-          return { categoryId: cat.id, mode: e.mode, value: e.value };
+          return { categoryId: cat.id, mode: e.mode, value: e.value, valueMax: e.valueMax };
         })
         .filter((v): v is ComboEntry => v !== null),
     }));
