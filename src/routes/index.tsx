@@ -1225,6 +1225,19 @@ function HypergeometricCalculator() {
                     onChange={(e) => setDeckSize(Math.max(1, Number(e.target.value) || 0))}
                   />
                 </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>{t("turns_label")}</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={turns}
+                    onChange={(e) =>
+                      setTurns(Math.max(1, Math.min(10, Number(e.target.value) || 1)))
+                    }
+                  />
+                  <p className="text-[11px] text-muted-foreground">{t("turns_hint")}</p>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
                 {t("format_range_hint", {
@@ -1233,6 +1246,9 @@ function HypergeometricCalculator() {
                   cats: spec.categories.join(", "),
                 })}
               </p>
+              {activeFormatKey === "rush" && (
+                <p className="text-[11px] text-gold/80">{t("rush_note")}</p>
+              )}
             </CardContent>
           </Card>
 
