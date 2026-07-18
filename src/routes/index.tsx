@@ -809,10 +809,12 @@ function HypergeometricCalculator() {
       id: nextComboId(),
       name: cb.name,
       entries: cb.entries
-        .map((e) => {
+        .map((e): ComboEntry | null => {
           const cat = byName.get(e.catName.toLowerCase());
           if (!cat) return null;
-          return { categoryId: cat.id, mode: e.mode, value: e.value, valueMax: e.valueMax };
+          const out: ComboEntry = { categoryId: cat.id, mode: e.mode, value: e.value };
+          if (typeof e.valueMax === "number") out.valueMax = e.valueMax;
+          return out;
         })
         .filter((v): v is ComboEntry => v !== null),
     }));
