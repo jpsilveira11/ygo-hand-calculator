@@ -1968,7 +1968,7 @@ function HypergeometricCalculator() {
                               .join(" + ")}
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                           {byTurn.map(({ turn, res }) => (
                             <div key={turn} className="flex items-baseline justify-between text-sm">
                               <span className="text-xs text-muted-foreground">T{turn}</span>
@@ -2004,7 +2004,7 @@ function HypergeometricCalculator() {
                         {t("in_deck_short", { n: size })} · {modeLabel(cat.mode)} {cat.value}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                       {byTurn.map(({ turn, res }) => (
                         <div key={turn} className="flex items-baseline justify-between text-xs">
                           <span className="text-muted-foreground">T{turn}</span>
