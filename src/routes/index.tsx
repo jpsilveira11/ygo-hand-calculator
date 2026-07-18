@@ -447,10 +447,14 @@ function HypergeometricCalculator() {
 
   const activeFormatKey: FormatKey = formatOption === "auto" ? detectFormat(deckSize) : formatOption;
   const spec = FORMATS[activeFormatKey];
-  const hands: { turn: 1 | 2; size: number }[] = [
-    { turn: 1, size: spec.turn1Hand },
-    { turn: 2, size: spec.turn2Hand },
-  ];
+  const hands: { turn: number; size: number }[] = useMemo(
+    () =>
+      Array.from({ length: Math.max(1, Math.min(10, turns)) }, (_, i) => ({
+        turn: i + 1,
+        size: cardsSeenAtTurn(activeFormatKey, i + 1),
+      })),
+    [activeFormatKey, turns],
+  );
 
   const derivedCounts = useMemo(() => {
     const counts: Record<string, number> = {};
