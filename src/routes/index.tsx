@@ -1269,7 +1269,8 @@ function HypergeometricCalculator() {
       toast.error(t("export_fail"));
     } finally {
       toHide.forEach((el, i) => (el.style.display = prevDisplay[i]));
-      host.removeChild(summary);
+      summary.remove();
+      legend.remove();
       setExporting(false);
     }
   };
