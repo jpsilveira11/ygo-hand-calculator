@@ -1183,9 +1183,11 @@ function HypergeometricCalculator() {
       console.error(e);
       toast.error(t("export_fail"));
     } finally {
+      legend.remove();
       setExporting(false);
     }
   };
+
 
   const exportChart = async (kind: "png" | "pdf") => {
     if (!chartRef.current) return;
