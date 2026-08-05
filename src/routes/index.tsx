@@ -147,6 +147,18 @@ interface Combo {
   entries: ComboEntry[];
 }
 
+/**
+ * One chart row. `label`/`kind`/`detail` are always present; per-turn keys are
+ * dynamic (`T1`, `T1frac`, `T2`, ...), hence the index signature.
+ */
+interface ChartRow {
+  label: string;
+  kind: string;
+  detail: string;
+  [turnKey: string]: string | number;
+}
+
+
 interface Preset {
   name: string;
   combos: {
@@ -228,10 +240,40 @@ function modeLabel(m: Mode): string {
   return m === "atLeast" ? "≥" : m === "exactly" ? "=" : m === "atMost" ? "≤" : "↔";
 }
 
+/** Human readable constraint, e.g. "≥ 1", "= 2", "≤ 3", "≥ 1 ≤ 3" (between). */
+function describeConstraint(m: Mode, value: number, valueMax?: number): string {
+  if (m === "between") return `≥ ${value} ≤ ${valueMax ?? value}`;
+  return `${modeLabel(m)} ${value}`;
+}
+
+/** Clamp/normalize a (mode, value, valueMax) triple coming from untrusted sources. */
+function sanitizeBounds(
+  mode: Mode,
+  value: unknown,
+  valueMax: unknown,
+): { value: number; valueMax?: number } {
+  const v = Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const rawMax = Number(valueMax);
+  const hasMax = valueMax !== undefined && valueMax !== null && Number.isFinite(rawMax);
+  if (mode === "between") {
+    const max = hasMax ? Math.max(v, Math.floor(rawMax)) : v;
+    return { value: v, valueMax: max };
+  }
+  return hasMax ? { value: v, valueMax: Math.max(v, Math.floor(rawMax)) } : { value: v };
+}
+
+/** Clamp the number of turns to the supported 1..10 range. */
+function sanitizeTurns(n: unknown, fallback: number): number {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(10, Math.max(1, Math.floor(v)));
+}
+
 function forcedMinValue(mode: Mode, value: number): number {
   // Sum used for feasibility check (min forced picks in hand).
   return mode === "atMost" ? 0 : value;
 }
+
 
 
 // -------------------- Share encoding --------------------
@@ -399,32 +441,38 @@ function HypergeometricCalculator() {
     const state = decodeShare(match[1]);
     if (!state) return;
     // Rebuild categories with new IDs; map indices to new IDs for combos.
-    const newCats: Category[] = state.cats.map((c) => ({
-      id: nextCatId(),
-      name: c.name,
-      count: c.count,
-      mode: c.mode,
-      value: c.value,
-      valueMax: c.valueMax,
-      include: c.include,
-    }));
+    const validModes: Mode[] = ["atLeast", "exactly", "atMost", "between"];
+    const safeMode = (m: unknown): Mode => (validModes.includes(m as Mode) ? (m as Mode) : "atLeast");
+    const newCats: Category[] = state.cats.map((c) => {
+      const mode = safeMode(c.mode);
+      const { value, valueMax } = sanitizeBounds(mode, c.value, c.valueMax);
+      return {
+        id: nextCatId(),
+        name: c.name,
+        count: Math.max(0, Math.floor(Number(c.count) || 0)),
+        mode,
+        value,
+        valueMax,
+        include: !!c.include,
+      };
+    });
     const newCombos: Combo[] = state.combos.map((cb) => ({
       id: nextComboId(),
       name: cb.name,
       entries: cb.entries
         .filter((e) => e.catIdx >= 0 && e.catIdx < newCats.length)
-        .map((e) => ({
-          categoryId: newCats[e.catIdx].id,
-          mode: e.mode,
-          value: e.value,
-          valueMax: e.valueMax,
-        })),
+        .map((e): ComboEntry => {
+          const mode = safeMode(e.mode);
+          const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+          return { categoryId: newCats[e.catIdx].id, mode, value, valueMax };
+        }),
     }));
+    // Turns must be restored BEFORE categories/combos so the first computation
+    // of `hands` (and therefore every probability) already uses the shared value.
+    setTurns(sanitizeTurns(state.turns, 2));
     setFormatOption(state.fmt);
-    setDeckSize(state.size);
-    if (typeof state.turns === "number" && state.turns >= 1 && state.turns <= 10) {
-      setTurns(Math.floor(state.turns));
-    }
+    setDeckSize(Math.max(1, Math.floor(Number(state.size) || 40)));
+
     setCategories(newCats);
     setCombos(newCombos);
     if (state.lang === "pt" || state.lang === "en" || state.lang === "es") setLang(state.lang);
@@ -737,31 +785,45 @@ function HypergeometricCalculator() {
 
   // -------------------- Chart data --------------------
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo<ChartRow[]>(() => {
     const fracOrDash = (r: { numerator: bigint; denominator: bigint } | null) =>
       r ? formatFraction(r.numerator, r.denominator) : "—";
-    const rows: Array<Record<string, string | number>> = [];
+    const rows: ChartRow[] = [];
     const pushRow = (
       label: string,
       kind: string,
+      detail: string,
       byTurn: { turn: number; res: ReturnType<typeof multivariateProbability> | null }[],
     ) => {
-      const row: Record<string, string | number> = { label, kind };
+      const row: ChartRow = { label, kind, detail };
       for (const bt of byTurn) {
         row[`T${bt.turn}`] = bt.res ? +(bt.res.probability * 100).toFixed(2) : 0;
         row[`T${bt.turn}frac`] = fracOrDash(bt.res);
       }
       rows.push(row);
     };
-    for (const p of perCategoryResults) pushRow(p.cat.name, t("categorized"), p.byTurn);
+    for (const p of perCategoryResults)
+      pushRow(
+        p.cat.name,
+        t("categorized"),
+        describeConstraint(p.cat.mode, p.cat.value, p.cat.valueMax),
+        p.byTurn,
+      );
     for (const cr of comboResults)
       pushRow(
         cr.combo.name,
         "Combo",
+        cr.combo.entries
+          .map((e) => {
+            const cat = categories.find((c) => c.id === e.categoryId);
+            return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
+          })
+          .join(" + "),
         cr.byTurn.map((bt) => ({ turn: bt.turn, res: cr.valid ? bt.res : null })),
       );
     return rows;
-  }, [perCategoryResults, comboResults, t]);
+  }, [perCategoryResults, comboResults, categories, t]);
+
 
   const turnColors = [
     "var(--gold)",
@@ -817,11 +879,15 @@ function HypergeometricCalculator() {
         .map((e): ComboEntry | null => {
           const cat = byName.get(e.catName.toLowerCase());
           if (!cat) return null;
-          const out: ComboEntry = { categoryId: cat.id, mode: e.mode, value: e.value };
-          if (typeof e.valueMax === "number") out.valueMax = e.valueMax;
+          const mode: Mode =
+            e.mode === "exactly" || e.mode === "atMost" || e.mode === "between" ? e.mode : "atLeast";
+          const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+          const out: ComboEntry = { categoryId: cat.id, mode, value };
+          if (valueMax !== undefined) out.valueMax = valueMax;
           return out;
         })
         .filter((v): v is ComboEntry => v !== null),
+
     }));
     setCombos(loaded);
     const missing = p.combos.reduce(
@@ -1089,17 +1155,40 @@ function HypergeometricCalculator() {
       border-radius: 8px; background: var(--muted); font-size: 11px;
       color: var(--foreground); font-family: ui-monospace, SFMono-Regular, monospace;
     `;
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const turnsHtml = (r: ChartRow) =>
+      hands
+        .map(
+          ({ turn }, i) =>
+            `<span style="color:${turnColors[i % turnColors.length]};white-space:nowrap;">T${turn} ${
+              r[`T${turn}`] ?? 0
+            }% <span style="opacity:.6">${esc(String(r[`T${turn}frac`] ?? "—"))}</span></span>`,
+        )
+        .join("");
     const rowsHtml = chartData
       .map(
         (r) => `
-        <div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;">
-          <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</span>
-          <span style="color:var(--gold);">T1 ${r.T1}% <span style="opacity:.6">${r.T1frac}</span></span>
-          <span style="color:var(--accent);">T2 ${r.T2}% <span style="opacity:.6">${r.T2frac}</span></span>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;align-items:baseline;flex-wrap:wrap;">
+          <span style="min-width:0;flex:1;">
+            <span style="font-weight:700;">${esc(r.label)}</span>
+            <span style="opacity:.7;"> — ${esc(r.detail)}</span>
+          </span>
+          <span style="display:flex;gap:10px;flex-wrap:wrap;">${turnsHtml(r)}</span>
         </div>`,
       )
       .join("");
-    summary.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">T1 vs T2 — valores exatos</div>${rowsHtml}`;
+    const handsHtml = hands
+      .map(({ turn, size }) => `T${turn}: ${t("cards_seen", { n: size })}`)
+      .join(" · ");
+    summary.innerHTML =
+      `<div style="font-weight:700;margin-bottom:2px;">${esc(spec.label)} · ${esc(
+        t("hand_cards", { n: deckSize }),
+      )}</div>` +
+      `<div style="opacity:.75;margin-bottom:6px;">${esc(handsHtml)}</div>` +
+      rowsHtml;
+
+
     host.appendChild(summary);
     const toHide = Array.from(host.querySelectorAll<HTMLElement>("[data-export-hide]"));
     const prevDisplay = toHide.map((el) => el.style.display);
@@ -1856,7 +1945,7 @@ function HypergeometricCalculator() {
 
               {resultsByTurn && (
                 <div className="text-xs text-muted-foreground">
-                  {t("combining", { list: included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ") })}
+                  {t("combining", { list: included.map((c) => `${describeConstraint(c.mode, c.value, c.valueMax)} ${c.name}`).join(" · ") })}
                 </div>
               )}
 
@@ -1917,7 +2006,11 @@ function HypergeometricCalculator() {
                                 }}
                               >
                                 <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
-                                <div style={{ opacity: 0.7, marginBottom: 6 }}>{row.kind}</div>
+                                <div style={{ opacity: 0.7, marginBottom: 6 }}>
+                                  {row.kind}
+                                  {row.detail ? ` — ${row.detail}` : ""}
+                                </div>
+
                                 {hands.map(({ turn }, i) => (
                                   <div key={turn} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                                     <span style={{ color: turnColors[i % turnColors.length] }}>T{turn}</span>
@@ -1963,7 +2056,7 @@ function HypergeometricCalculator() {
                             {combo.entries
                               .map((e) => {
                                 const cat = categories.find((c) => c.id === e.categoryId);
-                                return `${modeLabel(e.mode)}${e.value} ${cat?.name ?? "?"}`;
+                                return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
                               })
                               .join(" + ")}
                           </span>
@@ -2001,7 +2094,7 @@ function HypergeometricCalculator() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{cat.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {t("in_deck_short", { n: size })} · {modeLabel(cat.mode)} {cat.value}
+                        {t("in_deck_short", { n: size })} · {describeConstraint(cat.mode, cat.value, cat.valueMax)}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
