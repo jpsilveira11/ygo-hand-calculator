@@ -429,32 +429,38 @@ function HypergeometricCalculator() {
     const state = decodeShare(match[1]);
     if (!state) return;
     // Rebuild categories with new IDs; map indices to new IDs for combos.
-    const newCats: Category[] = state.cats.map((c) => ({
-      id: nextCatId(),
-      name: c.name,
-      count: c.count,
-      mode: c.mode,
-      value: c.value,
-      valueMax: c.valueMax,
-      include: c.include,
-    }));
+    const validModes: Mode[] = ["atLeast", "exactly", "atMost", "between"];
+    const safeMode = (m: unknown): Mode => (validModes.includes(m as Mode) ? (m as Mode) : "atLeast");
+    const newCats: Category[] = state.cats.map((c) => {
+      const mode = safeMode(c.mode);
+      const { value, valueMax } = sanitizeBounds(mode, c.value, c.valueMax);
+      return {
+        id: nextCatId(),
+        name: c.name,
+        count: Math.max(0, Math.floor(Number(c.count) || 0)),
+        mode,
+        value,
+        valueMax,
+        include: !!c.include,
+      };
+    });
     const newCombos: Combo[] = state.combos.map((cb) => ({
       id: nextComboId(),
       name: cb.name,
       entries: cb.entries
         .filter((e) => e.catIdx >= 0 && e.catIdx < newCats.length)
-        .map((e) => ({
-          categoryId: newCats[e.catIdx].id,
-          mode: e.mode,
-          value: e.value,
-          valueMax: e.valueMax,
-        })),
+        .map((e): ComboEntry => {
+          const mode = safeMode(e.mode);
+          const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+          return { categoryId: newCats[e.catIdx].id, mode, value, valueMax };
+        }),
     }));
+    // Turns must be restored BEFORE categories/combos so the first computation
+    // of `hands` (and therefore every probability) already uses the shared value.
+    setTurns(sanitizeTurns(state.turns, 2));
     setFormatOption(state.fmt);
-    setDeckSize(state.size);
-    if (typeof state.turns === "number" && state.turns >= 1 && state.turns <= 10) {
-      setTurns(Math.floor(state.turns));
-    }
+    setDeckSize(Math.max(1, Math.floor(Number(state.size) || 40)));
+
     setCategories(newCats);
     setCombos(newCombos);
     if (state.lang === "pt" || state.lang === "en" || state.lang === "es") setLang(state.lang);
