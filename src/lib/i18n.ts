@@ -9,6 +9,9 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 type Dict = Record<string, string>;
 
 const pt: Dict = {
+  legend_title: "Legenda",
+  legend_turns: "Turnos exibidos",
+  legend_between: "Modo entre (≥ X ≤ Y): conta mãos com no mínimo X e no máximo Y cartas da categoria.",
   app_title: "Calculadora Hipergeométrica",
   app_subtitle: "Yu-Gi-Oh — Avançado/Genesys · Speed · Rush",
   deck_badge: "Deck {size} · Mão T1 {t1} · T2 {t2}",
@@ -139,6 +142,9 @@ const pt: Dict = {
 };
 
 const en: Dict = {
+  legend_title: "Legend",
+  legend_turns: "Turns shown",
+  legend_between: "Between mode (≥ X ≤ Y): counts hands with at least X and at most Y cards of the category.",
   app_title: "Hypergeometric Calculator",
   app_subtitle: "Yu-Gi-Oh — Advanced/Genesys · Speed · Rush",
   deck_badge: "Deck {size} · Hand T1 {t1} · T2 {t2}",
@@ -269,6 +275,9 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  legend_title: "Leyenda",
+  legend_turns: "Turnos mostrados",
+  legend_between: "Modo entre (≥ X ≤ Y): cuenta manos con al menos X y como máximo Y cartas de la categoría.",
   app_title: "Calculadora Hipergeométrica",
   app_subtitle: "Yu-Gi-Oh — Avanzado/Genesys · Speed · Rush",
   deck_badge: "Deck {size} · Mano T1 {t1} · T2 {t2}",
