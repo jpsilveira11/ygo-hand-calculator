@@ -1945,7 +1945,7 @@ function HypergeometricCalculator() {
 
               {resultsByTurn && (
                 <div className="text-xs text-muted-foreground">
-                  {t("combining", { list: included.map((c) => `${modeLabel(c.mode)}${c.value} ${c.name}`).join(" · ") })}
+                  {t("combining", { list: included.map((c) => `${describeConstraint(c.mode, c.value, c.valueMax)} ${c.name}`).join(" · ") })}
                 </div>
               )}
 
@@ -2056,7 +2056,7 @@ function HypergeometricCalculator() {
                             {combo.entries
                               .map((e) => {
                                 const cat = categories.find((c) => c.id === e.categoryId);
-                                return `${modeLabel(e.mode)}${e.value} ${cat?.name ?? "?"}`;
+                                return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
                               })
                               .join(" + ")}
                           </span>
@@ -2094,7 +2094,7 @@ function HypergeometricCalculator() {
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{cat.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {t("in_deck_short", { n: size })} · {modeLabel(cat.mode)} {cat.value}
+                        {t("in_deck_short", { n: size })} · {describeConstraint(cat.mode, cat.value, cat.valueMax)}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
