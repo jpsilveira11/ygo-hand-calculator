@@ -228,10 +228,40 @@ function modeLabel(m: Mode): string {
   return m === "atLeast" ? "≥" : m === "exactly" ? "=" : m === "atMost" ? "≤" : "↔";
 }
 
+/** Human readable constraint, e.g. "≥ 1", "= 2", "≤ 3", "≥ 1 ≤ 3" (between). */
+function describeConstraint(m: Mode, value: number, valueMax?: number): string {
+  if (m === "between") return `≥ ${value} ≤ ${valueMax ?? value}`;
+  return `${modeLabel(m)} ${value}`;
+}
+
+/** Clamp/normalize a (mode, value, valueMax) triple coming from untrusted sources. */
+function sanitizeBounds(
+  mode: Mode,
+  value: unknown,
+  valueMax: unknown,
+): { value: number; valueMax?: number } {
+  const v = Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+  const rawMax = Number(valueMax);
+  const hasMax = valueMax !== undefined && valueMax !== null && Number.isFinite(rawMax);
+  if (mode === "between") {
+    const max = hasMax ? Math.max(v, Math.floor(rawMax)) : v;
+    return { value: v, valueMax: max };
+  }
+  return hasMax ? { value: v, valueMax: Math.max(v, Math.floor(rawMax)) } : { value: v };
+}
+
+/** Clamp the number of turns to the supported 1..10 range. */
+function sanitizeTurns(n: unknown, fallback: number): number {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(10, Math.max(1, Math.floor(v)));
+}
+
 function forcedMinValue(mode: Mode, value: number): number {
   // Sum used for feasibility check (min forced picks in hand).
   return mode === "atMost" ? 0 : value;
 }
+
 
 
 // -------------------- Share encoding --------------------
