@@ -2006,7 +2006,11 @@ function HypergeometricCalculator() {
                                 }}
                               >
                                 <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
-                                <div style={{ opacity: 0.7, marginBottom: 6 }}>{row.kind}</div>
+                                <div style={{ opacity: 0.7, marginBottom: 6 }}>
+                                  {row.kind}
+                                  {row.detail ? ` — ${row.detail}` : ""}
+                                </div>
+
                                 {hands.map(({ turn }, i) => (
                                   <div key={turn} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                                     <span style={{ color: turnColors[i % turnColors.length] }}>T{turn}</span>
