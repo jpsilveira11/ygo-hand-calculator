@@ -853,11 +853,15 @@ function HypergeometricCalculator() {
         .map((e): ComboEntry | null => {
           const cat = byName.get(e.catName.toLowerCase());
           if (!cat) return null;
-          const out: ComboEntry = { categoryId: cat.id, mode: e.mode, value: e.value };
-          if (typeof e.valueMax === "number") out.valueMax = e.valueMax;
+          const mode: Mode =
+            e.mode === "exactly" || e.mode === "atMost" || e.mode === "between" ? e.mode : "atLeast";
+          const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+          const out: ComboEntry = { categoryId: cat.id, mode, value };
+          if (valueMax !== undefined) out.valueMax = valueMax;
           return out;
         })
         .filter((v): v is ComboEntry => v !== null),
+
     }));
     setCombos(loaded);
     const missing = p.combos.reduce(
