@@ -773,31 +773,45 @@ function HypergeometricCalculator() {
 
   // -------------------- Chart data --------------------
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo<ChartRow[]>(() => {
     const fracOrDash = (r: { numerator: bigint; denominator: bigint } | null) =>
       r ? formatFraction(r.numerator, r.denominator) : "—";
-    const rows: Array<Record<string, string | number>> = [];
+    const rows: ChartRow[] = [];
     const pushRow = (
       label: string,
       kind: string,
+      detail: string,
       byTurn: { turn: number; res: ReturnType<typeof multivariateProbability> | null }[],
     ) => {
-      const row: Record<string, string | number> = { label, kind };
+      const row: ChartRow = { label, kind, detail };
       for (const bt of byTurn) {
         row[`T${bt.turn}`] = bt.res ? +(bt.res.probability * 100).toFixed(2) : 0;
         row[`T${bt.turn}frac`] = fracOrDash(bt.res);
       }
       rows.push(row);
     };
-    for (const p of perCategoryResults) pushRow(p.cat.name, t("categorized"), p.byTurn);
+    for (const p of perCategoryResults)
+      pushRow(
+        p.cat.name,
+        t("categorized"),
+        describeConstraint(p.cat.mode, p.cat.value, p.cat.valueMax),
+        p.byTurn,
+      );
     for (const cr of comboResults)
       pushRow(
         cr.combo.name,
         "Combo",
+        cr.combo.entries
+          .map((e) => {
+            const cat = categories.find((c) => c.id === e.categoryId);
+            return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
+          })
+          .join(" + "),
         cr.byTurn.map((bt) => ({ turn: bt.turn, res: cr.valid ? bt.res : null })),
       );
     return rows;
-  }, [perCategoryResults, comboResults, t]);
+  }, [perCategoryResults, comboResults, categories, t]);
+
 
   const turnColors = [
     "var(--gold)",
