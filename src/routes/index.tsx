@@ -147,6 +147,18 @@ interface Combo {
   entries: ComboEntry[];
 }
 
+/**
+ * One chart row. `label`/`kind`/`detail` are always present; per-turn keys are
+ * dynamic (`T1`, `T1frac`, `T2`, ...), hence the index signature.
+ */
+interface ChartRow {
+  label: string;
+  kind: string;
+  detail: string;
+  [turnKey: string]: string | number;
+}
+
+
 interface Preset {
   name: string;
   combos: {
