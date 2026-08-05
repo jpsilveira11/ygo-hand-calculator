@@ -1179,14 +1179,15 @@ function HypergeometricCalculator() {
       )
       .join("");
     const handsHtml = hands
-      .map(({ turn, size }) => `T${turn}: ${size} ${t("cards_seen")}`)
+      .map(({ turn, size }) => `T${turn}: ${t("cards_seen", { n: size })}`)
       .join(" · ");
     summary.innerHTML =
-      `<div style="font-weight:700;margin-bottom:2px;">${esc(spec.label)} · ${deckSize} ${t(
-        "cards",
+      `<div style="font-weight:700;margin-bottom:2px;">${esc(spec.label)} · ${esc(
+        t("hand_cards", { n: deckSize }),
       )}</div>` +
       `<div style="opacity:.75;margin-bottom:6px;">${esc(handsHtml)}</div>` +
       rowsHtml;
+
 
     host.appendChild(summary);
     const toHide = Array.from(host.querySelectorAll<HTMLElement>("[data-export-hide]"));
