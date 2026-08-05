@@ -1150,6 +1150,8 @@ function HypergeometricCalculator() {
 
   const exportResults = async (kind: "png" | "pdf") => {
     if (!resultsRef.current) return;
+    const legend = buildExportLegend();
+    resultsRef.current.appendChild(legend);
     try {
       setExporting(true);
       const bg = getComputedStyle(document.body).backgroundColor || "#ffffff";
