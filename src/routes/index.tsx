@@ -1106,6 +1106,48 @@ function HypergeometricCalculator() {
 
   // -------------------- Export --------------------
 
+  const escHtml = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  /** Visible legend appended to PNG/PDF exports: turn list + between-mode meaning. */
+  const buildExportLegend = () => {
+    const usesBetween =
+      categories.some((c) => c.include && c.mode === "between") ||
+      combos.some((cb) => cb.entries.some((e) => e.mode === "between"));
+    const el = document.createElement("div");
+    el.setAttribute("data-export-legend", "1");
+    el.style.cssText = `
+      margin-top: 10px; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--muted); font-size: 11px;
+      color: var(--foreground); line-height: 1.5;
+    `;
+    const chips = hands
+      .map(
+        ({ turn, size }, i) =>
+          `<span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+             <span style="width:9px;height:9px;border-radius:2px;background:${
+               turnColors[i % turnColors.length]
+             };display:inline-block;"></span>
+             <span><b>T${turn}</b> — ${escHtml(t("cards_seen", { n: size }))}</span>
+           </span>`,
+      )
+      .join('<span style="opacity:.4;margin:0 6px;">·</span>');
+    el.innerHTML =
+      `<div style="font-weight:700;margin-bottom:4px;">${escHtml(t("legend_title"))}</div>` +
+      `<div style="margin-bottom:${usesBetween ? "4px" : "0"};">${escHtml(
+        t("legend_turns"),
+      )}: ${chips}</div>` +
+      (usesBetween
+        ? `<div style="opacity:.85;">${escHtml(t("legend_between"))}</div>`
+        : "") +
+      `<div style="opacity:.7;margin-top:4px;">${escHtml(
+        `${spec.label} · ${t("deck_size")}: ${deckSize} · ${t("turns_label")}: ${hands
+          .map((h) => `T${h.turn}`)
+          .join(", ")}`,
+      )}</div>`;
+    return el;
+  };
+
   const exportResults = async (kind: "png" | "pdf") => {
     if (!resultsRef.current) return;
     try {
