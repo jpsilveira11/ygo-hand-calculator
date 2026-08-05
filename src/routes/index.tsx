@@ -1235,7 +1235,9 @@ function HypergeometricCalculator() {
       rowsHtml;
 
 
+    const legend = buildExportLegend();
     host.appendChild(summary);
+    host.appendChild(legend);
     const toHide = Array.from(host.querySelectorAll<HTMLElement>("[data-export-hide]"));
     const prevDisplay = toHide.map((el) => el.style.display);
     toHide.forEach((el) => (el.style.display = "none"));
