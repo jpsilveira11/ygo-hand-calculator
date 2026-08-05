@@ -1155,17 +1155,39 @@ function HypergeometricCalculator() {
       border-radius: 8px; background: var(--muted); font-size: 11px;
       color: var(--foreground); font-family: ui-monospace, SFMono-Regular, monospace;
     `;
+    const esc = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const turnsHtml = (r: ChartRow) =>
+      hands
+        .map(
+          ({ turn }, i) =>
+            `<span style="color:${turnColors[i % turnColors.length]};white-space:nowrap;">T${turn} ${
+              r[`T${turn}`] ?? 0
+            }% <span style="opacity:.6">${esc(String(r[`T${turn}frac`] ?? "—"))}</span></span>`,
+        )
+        .join("");
     const rowsHtml = chartData
       .map(
         (r) => `
-        <div style="display:flex;justify-content:space-between;gap:12px;padding:2px 0;">
-          <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.label}</span>
-          <span style="color:var(--gold);">T1 ${r.T1}% <span style="opacity:.6">${r.T1frac}</span></span>
-          <span style="color:var(--accent);">T2 ${r.T2}% <span style="opacity:.6">${r.T2frac}</span></span>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;align-items:baseline;flex-wrap:wrap;">
+          <span style="min-width:0;flex:1;">
+            <span style="font-weight:700;">${esc(r.label)}</span>
+            <span style="opacity:.7;"> — ${esc(r.detail)}</span>
+          </span>
+          <span style="display:flex;gap:10px;flex-wrap:wrap;">${turnsHtml(r)}</span>
         </div>`,
       )
       .join("");
-    summary.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">T1 vs T2 — valores exatos</div>${rowsHtml}`;
+    const handsHtml = hands
+      .map(({ turn, size }) => `T${turn}: ${size} ${t("cards_seen")}`)
+      .join(" · ");
+    summary.innerHTML =
+      `<div style="font-weight:700;margin-bottom:2px;">${esc(spec.label)} · ${deckSize} ${t(
+        "cards",
+      )}</div>` +
+      `<div style="opacity:.75;margin-bottom:6px;">${esc(handsHtml)}</div>` +
+      rowsHtml;
+
     host.appendChild(summary);
     const toHide = Array.from(host.querySelectorAll<HTMLElement>("[data-export-hide]"));
     const prevDisplay = toHide.map((el) => el.style.display);
