@@ -666,6 +666,35 @@ function HypergeometricCalculator() {
     );
   };
 
+  /** Add a highlighted (focus) card: its own condition, carved out of a category. */
+  const addFocusCard = (rawName: string, parentCatId?: string, manualCount = 0) => {
+    const name = rawName.trim();
+    if (!name) return;
+    const key = normalizeCardName(name);
+    if (categories.some((c) => c.cardKey === key)) {
+      toast.error(t("focus_dupe"));
+      return;
+    }
+    const imported = parsedCards
+      .filter((p) => normalizeCardName(p.name) === key)
+      .reduce((s, p) => s + p.quantity, 0);
+    setCategories((prev) => [
+      ...prev,
+      {
+        id: nextCatId(),
+        name,
+        count: imported || manualCount || 1,
+        mode: "atLeast",
+        value: 1,
+        include: true,
+        cardKey: key,
+        parentCatId,
+      },
+    ]);
+    toast.success(t("focus_added", { name }));
+  };
+
+
   // -------------------- Probability --------------------
 
   const included = categories.filter((c) => c.include);
