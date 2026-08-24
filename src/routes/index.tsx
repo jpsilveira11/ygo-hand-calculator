@@ -509,18 +509,30 @@ function HypergeometricCalculator() {
     [activeFormatKey, turns],
   );
 
+  // Highlighted (focus) cards are pseudo-categories keyed by card name.
+  const focusCats = useMemo(() => categories.filter((c) => !!c.cardKey), [categories]);
+  const plainCats = useMemo(() => categories.filter((c) => !c.cardKey), [categories]);
+
   const derivedCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const focusByKey = new Map(focusCats.map((c) => [c.cardKey!, c.id]));
     parsedCards.forEach((card, idx) => {
+      const focusId = focusByKey.get(normalizeCardName(card.name));
+      if (focusId) {
+        // Highlighted cards are counted on their own bucket (disjoint from the category).
+        counts[focusId] = (counts[focusId] ?? 0) + card.quantity;
+        return;
+      }
       const cid = cardAssignments[idx];
       if (cid && cid !== "__none__") counts[cid] = (counts[cid] ?? 0) + card.quantity;
     });
     return counts;
-  }, [parsedCards, cardAssignments]);
+  }, [parsedCards, cardAssignments, focusCats]);
 
   const hasImportedCards = parsedCards.length > 0;
   const effectiveCount = (c: Category): number =>
     hasImportedCards ? (derivedCounts[c.id] ?? 0) : c.count;
+
 
   const totalCategorized = categories.reduce((s, c) => s + effectiveCount(c), 0);
   const importedTotal = parsedCards.reduce((s, c) => s + c.quantity, 0);
