@@ -279,6 +279,12 @@ function forcedMinValue(mode: Mode, value: number): number {
   return mode === "atMost" ? 0 : value;
 }
 
+/** Normalized key used to match a highlighted card against imported card names. */
+function normalizeCardName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+
 
 
 // -------------------- Share encoding --------------------
