@@ -467,6 +467,8 @@ function HypergeometricCalculator() {
         value,
         valueMax,
         include: !!c.include,
+        cardKey: typeof c.cardKey === "string" && c.cardKey ? normalizeCardName(c.cardKey) : undefined,
+
       };
     });
     const newCombos: Combo[] = state.combos.map((cb) => ({
