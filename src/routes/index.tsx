@@ -300,6 +300,8 @@ interface ShareState {
     value: number;
     valueMax?: number;
     include: boolean;
+    cardKey?: string;
+
   }[];
   combos: {
     name: string;
