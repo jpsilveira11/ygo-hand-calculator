@@ -133,7 +133,12 @@ interface Category {
   value: number;
   valueMax?: number; // upper bound (used by "between", optional for "atLeast")
   include: boolean;
+  /** When set, this "category" is a single highlighted card (matched by name). */
+  cardKey?: string;
+  /** Category the highlighted card was carved out of (its copies are subtracted there). */
+  parentCatId?: string;
 }
+
 
 interface ComboEntry {
   categoryId: string;
