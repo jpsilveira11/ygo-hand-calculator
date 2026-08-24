@@ -1618,7 +1618,10 @@ function HypergeometricCalculator() {
               <CardContent>
                 <ScrollArea className="h-[320px] pr-3">
                   <div className="space-y-1.5">
-                    {parsedCards.map((card, idx) => (
+                    {parsedCards.map((card, idx) => {
+                      const key = normalizeCardName(card.name);
+                      const focused = focusCats.find((f) => f.cardKey === key);
+                      return (
                       <div
                         key={idx}
                         className="flex items-center gap-2 p-2 rounded-md bg-muted/40 hover:bg-muted transition-colors"
@@ -1627,18 +1630,33 @@ function HypergeometricCalculator() {
                           {card.quantity}x
                         </Badge>
                         <span className="text-sm flex-1 truncate">{card.name}</span>
+                        {focused ? (
+                          <Badge className="bg-gold text-background shrink-0">★ {t("focus_badge")}</Badge>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 shrink-0"
+                            title={t("focus_add")}
+                            aria-label={t("focus_add")}
+                            onClick={() => addFocusCard(card.name, cardAssignments[idx])}
+                          >
+                            <Star className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Select
                           value={cardAssignments[idx] ?? "__none__"}
                           onValueChange={(v) =>
                             setCardAssignments((prev) => ({ ...prev, [idx]: v }))
                           }
+                          disabled={!!focused}
                         >
-                          <SelectTrigger className="w-[180px] h-8 text-xs">
+                          <SelectTrigger className="w-[160px] h-8 text-xs">
                             <SelectValue placeholder={t("category_placeholder")} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">{t("none_cat")}</SelectItem>
-                            {categories.map((c) => (
+                            {plainCats.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.name}
                               </SelectItem>
@@ -1646,7 +1664,9 @@ function HypergeometricCalculator() {
                           </SelectContent>
                         </Select>
                       </div>
-                    ))}
+                      );
+                    })}
+
                   </div>
                 </ScrollArea>
               </CardContent>
