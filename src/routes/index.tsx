@@ -1901,8 +1901,11 @@ function HypergeometricCalculator() {
                           </SelectTrigger>
                           <SelectContent>
                             {categories.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.cardKey ? `★ ${c.name}` : c.name}
+                              </SelectItem>
                             ))}
+
                           </SelectContent>
                         </Select>
                         <Select
