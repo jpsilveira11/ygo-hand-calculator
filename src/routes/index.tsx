@@ -1092,7 +1092,9 @@ function HypergeometricCalculator() {
         value: c.value,
         valueMax: c.valueMax,
         include: c.include,
+        cardKey: c.cardKey,
       })),
+
       combos: combos.map((cb) => ({
         name: cb.name,
         entries: cb.entries.map((e) => ({
