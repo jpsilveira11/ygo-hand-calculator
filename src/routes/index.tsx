@@ -1689,7 +1689,7 @@ function HypergeometricCalculator() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {categories.map((c) => {
+              {plainCats.map((c) => {
                 const count = effectiveCount(c);
                 return (
                   <div
