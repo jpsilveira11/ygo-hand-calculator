@@ -1805,6 +1805,166 @@ function HypergeometricCalculator() {
             </CardContent>
           </Card>
 
+          {/* Highlighted cards */}
+          <Card className="card-elevated">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Star className="w-4 h-4 text-gold" /> {t("focus_title")}
+              </CardTitle>
+              <CardDescription>{t("focus_desc")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {hasImportedCards ? (
+                  <Select value="" onValueChange={(v) => addFocusCard(v)}>
+                    <SelectTrigger className="h-8 flex-1 min-w-[180px] text-xs">
+                      <SelectValue placeholder={t("focus_pick")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {parsedCards
+                        .filter((p) => !focusCats.some((f) => f.cardKey === normalizeCardName(p.name)))
+                        .map((p, i) => (
+                          <SelectItem key={`${p.name}-${i}`} value={p.name}>
+                            {p.quantity}x {p.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Input
+                      placeholder={t("focus_manual_ph")}
+                      value={focusManual}
+                      onChange={(e) => setFocusManual(e.target.value)}
+                      className="h-8 flex-1 min-w-[160px] text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => {
+                        addFocusCard(focusManual);
+                        setFocusManual("");
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> {t("focus_add")}
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {focusCats.length === 0 && (
+                <p className="text-xs text-muted-foreground">{t("focus_empty")}</p>
+              )}
+
+              {focusCats.map((c) => {
+                const count = effectiveCount(c);
+                const parent = categories.find((p) => p.id === c.parentCatId);
+                return (
+                  <div key={c.id} className="p-3 rounded-lg border border-gold/40 bg-gold/5 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={c.include}
+                        onCheckedChange={(v) => updateCategory(c.id, { include: v })}
+                      />
+                      <span className="flex-1 text-sm font-medium truncate">★ {c.name}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0"
+                        aria-label={t("remove_cat")}
+                        onClick={() => removeCategory(c.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {parent && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("focus_parent")}: {parent.name}
+                      </p>
+                    )}
+                    <div className={`grid gap-2 ${c.mode === "between" ? "grid-cols-4" : "grid-cols-3"}`}>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={count}
+                          disabled={hasImportedCards}
+                          onChange={(e) =>
+                            updateCategory(c.id, { count: Math.max(0, Number(e.target.value) || 0) })
+                          }
+                          className="h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">{t("mode")}</Label>
+                        <Select
+                          value={c.mode}
+                          onValueChange={(v) => {
+                            const nextMode = v as Mode;
+                            const patch: Partial<Category> = { mode: nextMode };
+                            if (nextMode === "between" && (c.valueMax === undefined || c.valueMax < c.value)) {
+                              patch.valueMax = c.value;
+                            }
+                            updateCategory(c.id, patch);
+                          }}
+                          disabled={!c.include}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="atLeast">{t("mode_atleast")}</SelectItem>
+                            <SelectItem value="exactly">{t("mode_exactly")}</SelectItem>
+                            <SelectItem value="atMost">{t("mode_atmost")}</SelectItem>
+                            <SelectItem value="between">{t("mode_between")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          {c.mode === "between" ? `${t("value")} (min)` : t("value")}
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={maxHandSize}
+                          value={c.value}
+                          onChange={(e) =>
+                            updateCategory(c.id, { value: Math.max(0, Number(e.target.value) || 0) })
+                          }
+                          className="h-8"
+                          disabled={!c.include}
+                        />
+                      </div>
+                      {c.mode === "between" && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">{t("value_max")}</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxHandSize}
+                            value={c.valueMax ?? c.value}
+                            onChange={(e) =>
+                              updateCategory(c.id, {
+                                valueMax: Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="h-8"
+                            disabled={!c.include}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+
+
           {/* Combos */}
           <Card className="card-elevated">
             <CardHeader className="flex-row items-center justify-between">
