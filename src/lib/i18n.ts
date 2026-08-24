@@ -9,6 +9,16 @@ export const LANGS: { code: Lang; label: string; flag: string }[] = [
 type Dict = Record<string, string>;
 
 const pt: Dict = {
+  focus_title: "Cartas em destaque",
+  focus_desc: "Dê ênfase a cartas específicas (ex.: pelo menos 1 starter, sendo ele Snake-Eyes Ash). A carta é retirada da contagem da categoria e passa a ter sua própria condição.",
+  focus_add: "Destacar carta",
+  focus_pick: "Escolha uma carta...",
+  focus_manual_ph: "Nome da carta",
+  focus_empty: "Nenhuma carta em destaque.",
+  focus_parent: "Categoria de origem",
+  focus_badge: "Carta",
+  focus_added: "{name} agora está em destaque.",
+  focus_dupe: "Essa carta já está em destaque.",
   legend_title: "Legenda",
   legend_turns: "Turnos exibidos",
   legend_between: "Modo entre (≥ X ≤ Y): conta mãos com no mínimo X e no máximo Y cartas da categoria.",
@@ -142,6 +152,16 @@ const pt: Dict = {
 };
 
 const en: Dict = {
+  focus_title: "Highlighted cards",
+  focus_desc: "Emphasize specific cards (e.g. at least 1 starter, and that starter is Snake-Eyes Ash). The card is removed from its category count and gets its own condition.",
+  focus_add: "Highlight card",
+  focus_pick: "Pick a card...",
+  focus_manual_ph: "Card name",
+  focus_empty: "No highlighted cards.",
+  focus_parent: "Source category",
+  focus_badge: "Card",
+  focus_added: "{name} is now highlighted.",
+  focus_dupe: "That card is already highlighted.",
   legend_title: "Legend",
   legend_turns: "Turns shown",
   legend_between: "Between mode (≥ X ≤ Y): counts hands with at least X and at most Y cards of the category.",
@@ -275,6 +295,16 @@ const en: Dict = {
 };
 
 const es: Dict = {
+  focus_title: "Cartas destacadas",
+  focus_desc: "Destaca cartas específicas (ej.: al menos 1 starter, siendo ese starter Snake-Eyes Ash). La carta se resta del conteo de su categoría y recibe su propia condición.",
+  focus_add: "Destacar carta",
+  focus_pick: "Elige una carta...",
+  focus_manual_ph: "Nombre de la carta",
+  focus_empty: "Ninguna carta destacada.",
+  focus_parent: "Categoría de origen",
+  focus_badge: "Carta",
+  focus_added: "{name} ahora está destacada.",
+  focus_dupe: "Esa carta ya está destacada.",
   legend_title: "Leyenda",
   legend_turns: "Turnos mostrados",
   legend_between: "Modo entre (≥ X ≤ Y): cuenta manos con al menos X y como máximo Y cartas de la categoría.",
