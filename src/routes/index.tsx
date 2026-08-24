@@ -23,7 +23,9 @@ import {
   Languages as LanguagesIcon,
   Download,
   Upload as UploadIcon,
+  Star,
 } from "lucide-react";
+
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import {
@@ -133,7 +135,12 @@ interface Category {
   value: number;
   valueMax?: number; // upper bound (used by "between", optional for "atLeast")
   include: boolean;
+  /** When set, this "category" is a single highlighted card (matched by name). */
+  cardKey?: string;
+  /** Category the highlighted card was carved out of (its copies are subtracted there). */
+  parentCatId?: string;
 }
+
 
 interface ComboEntry {
   categoryId: string;
@@ -274,6 +281,12 @@ function forcedMinValue(mode: Mode, value: number): number {
   return mode === "atMost" ? 0 : value;
 }
 
+/** Normalized key used to match a highlighted card against imported card names. */
+function normalizeCardName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+
 
 
 // -------------------- Share encoding --------------------
@@ -289,6 +302,8 @@ interface ShareState {
     value: number;
     valueMax?: number;
     include: boolean;
+    cardKey?: string;
+
   }[];
   combos: {
     name: string;
@@ -454,6 +469,8 @@ function HypergeometricCalculator() {
         value,
         valueMax,
         include: !!c.include,
+        cardKey: typeof c.cardKey === "string" && c.cardKey ? normalizeCardName(c.cardKey) : undefined,
+
       };
     });
     const newCombos: Combo[] = state.combos.map((cb) => ({
@@ -504,18 +521,30 @@ function HypergeometricCalculator() {
     [activeFormatKey, turns],
   );
 
+  // Highlighted (focus) cards are pseudo-categories keyed by card name.
+  const focusCats = useMemo(() => categories.filter((c) => !!c.cardKey), [categories]);
+  const plainCats = useMemo(() => categories.filter((c) => !c.cardKey), [categories]);
+
   const derivedCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const focusByKey = new Map(focusCats.map((c) => [c.cardKey!, c.id]));
     parsedCards.forEach((card, idx) => {
+      const focusId = focusByKey.get(normalizeCardName(card.name));
+      if (focusId) {
+        // Highlighted cards are counted on their own bucket (disjoint from the category).
+        counts[focusId] = (counts[focusId] ?? 0) + card.quantity;
+        return;
+      }
       const cid = cardAssignments[idx];
       if (cid && cid !== "__none__") counts[cid] = (counts[cid] ?? 0) + card.quantity;
     });
     return counts;
-  }, [parsedCards, cardAssignments]);
+  }, [parsedCards, cardAssignments, focusCats]);
 
   const hasImportedCards = parsedCards.length > 0;
   const effectiveCount = (c: Category): number =>
     hasImportedCards ? (derivedCounts[c.id] ?? 0) : c.count;
+
 
   const totalCategorized = categories.reduce((s, c) => s + effectiveCount(c), 0);
   const importedTotal = parsedCards.reduce((s, c) => s + c.quantity, 0);
@@ -642,6 +671,35 @@ function HypergeometricCalculator() {
       })),
     );
   };
+
+  /** Add a highlighted (focus) card: its own condition, carved out of a category. */
+  const addFocusCard = (rawName: string, parentCatId?: string, manualCount = 0) => {
+    const name = rawName.trim();
+    if (!name) return;
+    const key = normalizeCardName(name);
+    if (categories.some((c) => c.cardKey === key)) {
+      toast.error(t("focus_dupe"));
+      return;
+    }
+    const imported = parsedCards
+      .filter((p) => normalizeCardName(p.name) === key)
+      .reduce((s, p) => s + p.quantity, 0);
+    setCategories((prev) => [
+      ...prev,
+      {
+        id: nextCatId(),
+        name,
+        count: imported || manualCount || 1,
+        mode: "atLeast",
+        value: 1,
+        include: true,
+        cardKey: key,
+        parentCatId,
+      },
+    ]);
+    toast.success(t("focus_added", { name }));
+  };
+
 
   // -------------------- Probability --------------------
 
@@ -1040,7 +1098,9 @@ function HypergeometricCalculator() {
         value: c.value,
         valueMax: c.valueMax,
         include: c.include,
+        cardKey: c.cardKey,
       })),
+
       combos: combos.map((cb) => ({
         name: cb.name,
         entries: cb.entries.map((e) => ({
@@ -1560,7 +1620,10 @@ function HypergeometricCalculator() {
               <CardContent>
                 <ScrollArea className="h-[320px] pr-3">
                   <div className="space-y-1.5">
-                    {parsedCards.map((card, idx) => (
+                    {parsedCards.map((card, idx) => {
+                      const key = normalizeCardName(card.name);
+                      const focused = focusCats.find((f) => f.cardKey === key);
+                      return (
                       <div
                         key={idx}
                         className="flex items-center gap-2 p-2 rounded-md bg-muted/40 hover:bg-muted transition-colors"
@@ -1569,18 +1632,33 @@ function HypergeometricCalculator() {
                           {card.quantity}x
                         </Badge>
                         <span className="text-sm flex-1 truncate">{card.name}</span>
+                        {focused ? (
+                          <Badge className="bg-gold text-background shrink-0">★ {t("focus_badge")}</Badge>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 shrink-0"
+                            title={t("focus_add")}
+                            aria-label={t("focus_add")}
+                            onClick={() => addFocusCard(card.name, cardAssignments[idx])}
+                          >
+                            <Star className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Select
                           value={cardAssignments[idx] ?? "__none__"}
                           onValueChange={(v) =>
                             setCardAssignments((prev) => ({ ...prev, [idx]: v }))
                           }
+                          disabled={!!focused}
                         >
-                          <SelectTrigger className="w-[180px] h-8 text-xs">
+                          <SelectTrigger className="w-[160px] h-8 text-xs">
                             <SelectValue placeholder={t("category_placeholder")} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">{t("none_cat")}</SelectItem>
-                            {categories.map((c) => (
+                            {plainCats.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.name}
                               </SelectItem>
@@ -1588,7 +1666,9 @@ function HypergeometricCalculator() {
                           </SelectContent>
                         </Select>
                       </div>
-                    ))}
+                      );
+                    })}
+
                   </div>
                 </ScrollArea>
               </CardContent>
@@ -1609,7 +1689,7 @@ function HypergeometricCalculator() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {categories.map((c) => {
+              {plainCats.map((c) => {
                 const count = effectiveCount(c);
                 return (
                   <div
@@ -1724,6 +1804,166 @@ function HypergeometricCalculator() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Highlighted cards */}
+          <Card className="card-elevated">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Star className="w-4 h-4 text-gold" /> {t("focus_title")}
+              </CardTitle>
+              <CardDescription>{t("focus_desc")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {hasImportedCards ? (
+                  <Select value="" onValueChange={(v) => addFocusCard(v)}>
+                    <SelectTrigger className="h-8 flex-1 min-w-[180px] text-xs">
+                      <SelectValue placeholder={t("focus_pick")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {parsedCards
+                        .filter((p) => !focusCats.some((f) => f.cardKey === normalizeCardName(p.name)))
+                        .map((p, i) => (
+                          <SelectItem key={`${p.name}-${i}`} value={p.name}>
+                            {p.quantity}x {p.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Input
+                      placeholder={t("focus_manual_ph")}
+                      value={focusManual}
+                      onChange={(e) => setFocusManual(e.target.value)}
+                      className="h-8 flex-1 min-w-[160px] text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => {
+                        addFocusCard(focusManual);
+                        setFocusManual("");
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> {t("focus_add")}
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {focusCats.length === 0 && (
+                <p className="text-xs text-muted-foreground">{t("focus_empty")}</p>
+              )}
+
+              {focusCats.map((c) => {
+                const count = effectiveCount(c);
+                const parent = categories.find((p) => p.id === c.parentCatId);
+                return (
+                  <div key={c.id} className="p-3 rounded-lg border border-gold/40 bg-gold/5 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={c.include}
+                        onCheckedChange={(v) => updateCategory(c.id, { include: v })}
+                      />
+                      <span className="flex-1 text-sm font-medium truncate">★ {c.name}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 shrink-0"
+                        aria-label={t("remove_cat")}
+                        onClick={() => removeCategory(c.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {parent && (
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("focus_parent")}: {parent.name}
+                      </p>
+                    )}
+                    <div className={`grid gap-2 ${c.mode === "between" ? "grid-cols-4" : "grid-cols-3"}`}>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={count}
+                          disabled={hasImportedCards}
+                          onChange={(e) =>
+                            updateCategory(c.id, { count: Math.max(0, Number(e.target.value) || 0) })
+                          }
+                          className="h-8"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">{t("mode")}</Label>
+                        <Select
+                          value={c.mode}
+                          onValueChange={(v) => {
+                            const nextMode = v as Mode;
+                            const patch: Partial<Category> = { mode: nextMode };
+                            if (nextMode === "between" && (c.valueMax === undefined || c.valueMax < c.value)) {
+                              patch.valueMax = c.value;
+                            }
+                            updateCategory(c.id, patch);
+                          }}
+                          disabled={!c.include}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="atLeast">{t("mode_atleast")}</SelectItem>
+                            <SelectItem value="exactly">{t("mode_exactly")}</SelectItem>
+                            <SelectItem value="atMost">{t("mode_atmost")}</SelectItem>
+                            <SelectItem value="between">{t("mode_between")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">
+                          {c.mode === "between" ? `${t("value")} (min)` : t("value")}
+                        </Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={maxHandSize}
+                          value={c.value}
+                          onChange={(e) =>
+                            updateCategory(c.id, { value: Math.max(0, Number(e.target.value) || 0) })
+                          }
+                          className="h-8"
+                          disabled={!c.include}
+                        />
+                      </div>
+                      {c.mode === "between" && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">{t("value_max")}</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={maxHandSize}
+                            value={c.valueMax ?? c.value}
+                            onChange={(e) =>
+                              updateCategory(c.id, {
+                                valueMax: Math.max(0, Number(e.target.value) || 0),
+                              })
+                            }
+                            className="h-8"
+                            disabled={!c.include}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+
 
           {/* Combos */}
           <Card className="card-elevated">
@@ -1849,8 +2089,11 @@ function HypergeometricCalculator() {
                           </SelectTrigger>
                           <SelectContent>
                             {categories.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.cardKey ? `★ ${c.name}` : c.name}
+                              </SelectItem>
                             ))}
+
                           </SelectContent>
                         </Select>
                         <Select
