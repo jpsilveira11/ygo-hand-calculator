@@ -23,7 +23,9 @@ import {
   Languages as LanguagesIcon,
   Download,
   Upload as UploadIcon,
+  Star,
 } from "lucide-react";
+
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import {
