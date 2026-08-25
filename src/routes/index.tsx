@@ -1732,7 +1732,8 @@ function HypergeometricCalculator() {
             </CardHeader>
             <CardContent className="space-y-3">
               {plainCats.map((c) => {
-                const count = effectiveCount(c);
+                const count = hasImportedCards ? groupSize(c) : c.count;
+
                 return (
                   <div
                     key={c.id}
