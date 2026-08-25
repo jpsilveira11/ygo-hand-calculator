@@ -713,10 +713,15 @@ function HypergeometricCalculator() {
         value: 1,
         include: true,
         cardKey: key,
-        parentCatId,
+        parentCatId: parentCatId === "__none__" ? undefined : parentCatId,
       },
     ]);
     toast.success(t("focus_added", { name }));
+  };
+
+  const removeFocusByKey = (key: string) => {
+    const target = categories.find((c) => c.cardKey === key);
+    if (target) removeCategory(target.id);
   };
 
 
@@ -1674,26 +1679,37 @@ function HypergeometricCalculator() {
                           {card.quantity}x
                         </Badge>
                         <span className="text-sm flex-1 truncate">{card.name}</span>
-                        {focused ? (
-                          <Badge className="bg-gold text-background shrink-0">★ {t("focus_badge")}</Badge>
-                        ) : (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 shrink-0"
-                            title={t("focus_add")}
-                            aria-label={t("focus_add")}
-                            onClick={() => addFocusCard(card.name, cardAssignments[idx])}
-                          >
-                            <Star className="w-4 h-4" />
-                          </Button>
-                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0"
+                          title={focused ? t("focus_remove") : t("focus_add")}
+                          aria-label={focused ? t("focus_remove") : t("focus_add")}
+                          onClick={() =>
+                            focused
+                              ? removeFocusByKey(key)
+                              : addFocusCard(
+                                  card.name,
+                                  cardAssignments[idx] && cardAssignments[idx] !== "__none__"
+                                    ? cardAssignments[idx]
+                                    : undefined,
+                                )
+                          }
+                        >
+                          <Star
+                            className={`w-4 h-4 ${focused ? "fill-gold text-gold" : ""}`}
+                          />
+                        </Button>
                         <Select
                           value={cardAssignments[idx] ?? "__none__"}
-                          onValueChange={(v) =>
-                            setCardAssignments((prev) => ({ ...prev, [idx]: v }))
-                          }
-                          disabled={!!focused}
+                          onValueChange={(v) => {
+                            setCardAssignments((prev) => ({ ...prev, [idx]: v }));
+                            if (focused) {
+                              updateCategory(focused.id, {
+                                parentCatId: v === "__none__" ? undefined : v,
+                              });
+                            }
+                          }}
                         >
                           <SelectTrigger className="w-[160px] h-8 text-xs">
                             <SelectValue placeholder={t("category_placeholder")} />

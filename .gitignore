@@ -7,26 +7,66 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Build outputs & caches
 dist
 dist-ssr
 .output
-.vinxi
-.tanstack/**
 .nitro
-*.local
+.vinxi
+.tanstack
+.vite
+.cache
+.turbo
+temp
 
-# Wrangler / Cloudflare
+# Environment variables & local configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+*.local
+!.env.example
+
+# Cloudflare / Wrangler
 .wrangler/
 .dev.vars
 
-# Editor directories and files
+# Editor & IDE configurations
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.sublime-project
+*.sublime-workspace
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# Temporary / Scratch files
+prompt.md
+prompt*.md
+*.tmp
+scratch/
