@@ -543,12 +543,30 @@ function HypergeometricCalculator() {
   }, [parsedCards, cardAssignments, focusCats]);
 
   const hasImportedCards = parsedCards.length > 0;
-  const effectiveCount = (c: Category): number =>
-    hasImportedCards ? (derivedCounts[c.id] ?? 0) : c.count;
+  /** Disjoint bucket size: a plain category never includes its highlighted cards. */
+  const effectiveCount = (c: Category): number => {
+    if (hasImportedCards) return derivedCounts[c.id] ?? 0;
+    if (c.cardKey) return c.count;
+    const children = focusCats
+      .filter((f) => f.parentCatId === c.id)
+      .reduce((s, f) => s + f.count, 0);
+    return Math.max(0, c.count - children);
+  };
 
+  /** Ids of every bucket that counts toward this category (itself + highlighted children). */
+  const memberIds = (c: Category): string[] =>
+    c.cardKey ? [c.id] : [c.id, ...focusCats.filter((f) => f.parentCatId === c.id).map((f) => f.id)];
+
+  /** Size of the union: e.g. "Starters" includes the copies of ★ Snake-Eye Ash. */
+  const groupSize = (c: Category): number =>
+    memberIds(c).reduce((s, id) => {
+      const cat = categories.find((x) => x.id === id);
+      return s + (cat ? effectiveCount(cat) : 0);
+    }, 0);
 
   const totalCategorized = categories.reduce((s, c) => s + effectiveCount(c), 0);
   const importedTotal = parsedCards.reduce((s, c) => s + c.quantity, 0);
+
 
   // -------------------- Actions --------------------
 
