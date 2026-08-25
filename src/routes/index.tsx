@@ -148,10 +148,19 @@ interface ComboEntry {
   value: number;
   valueMax?: number;
 }
+
+interface ComboClause {
+  id: string;
+  operator?: "and" | "or";
+  entries: ComboEntry[];
+}
+
 interface Combo {
   id: string;
   name: string;
-  entries: ComboEntry[];
+  operator?: "and" | "or";
+  clauses?: ComboClause[];
+  entries?: ComboEntry[];
 }
 
 /**
@@ -165,19 +174,49 @@ interface ChartRow {
   [turnKey: string]: string | number;
 }
 
+interface PresetClause {
+  operator?: "and" | "or";
+  entries: { catName: string; mode: Mode; value: number; valueMax?: number }[];
+}
+
+interface PresetCombo {
+  name: string;
+  operator?: "and" | "or";
+  clauses?: PresetClause[];
+  entries?: { catName: string; mode: Mode; value: number; valueMax?: number }[];
+}
 
 interface Preset {
   name: string;
-  combos: {
-    name: string;
-    entries: { catName: string; mode: Mode; value: number; valueMax?: number }[];
-  }[];
+  combos: PresetCombo[];
 }
 
 let catIdCounter = 0;
 const nextCatId = () => `cat_${++catIdCounter}`;
 let comboIdCounter = 0;
 const nextComboId = () => `combo_${++comboIdCounter}`;
+let clauseIdCounter = 0;
+const nextClauseId = () => `clause_${++clauseIdCounter}`;
+
+const validModes: Mode[] = ["atLeast", "exactly", "atMost", "between"];
+const safeMode = (m: unknown): Mode => (validModes.includes(m as Mode) ? (m as Mode) : "atLeast");
+
+function getComboClauses(combo: Combo): ComboClause[] {
+  if (combo.clauses && combo.clauses.length > 0) {
+    return combo.clauses;
+  }
+  if (combo.entries && combo.entries.length > 0) {
+    if (combo.operator === "or") {
+      return [{ id: nextClauseId(), operator: "or", entries: combo.entries }];
+    }
+    return combo.entries.map((e) => ({
+      id: nextClauseId(),
+      operator: "or",
+      entries: [e],
+    }));
+  }
+  return [];
+}
 
 function makeDefaultCategories(format: FormatKey): Category[] {
   return FORMATS[format].categories.map((name) => {
@@ -307,7 +346,12 @@ interface ShareState {
   }[];
   combos: {
     name: string;
-    entries: { catIdx: number; mode: Mode; value: number; valueMax?: number }[];
+    operator?: "and" | "or";
+    clauses?: {
+      operator?: "and" | "or";
+      entries: { catIdx: number; mode: Mode; value: number; valueMax?: number }[];
+    }[];
+    entries?: { catIdx: number; mode: Mode; value: number; valueMax?: number }[];
   }[];
   presets?: Preset[];
   lang?: Lang;
@@ -457,8 +501,6 @@ function HypergeometricCalculator() {
     const state = decodeShare(match[1]);
     if (!state) return;
     // Rebuild categories with new IDs; map indices to new IDs for combos.
-    const validModes: Mode[] = ["atLeast", "exactly", "atMost", "between"];
-    const safeMode = (m: unknown): Mode => (validModes.includes(m as Mode) ? (m as Mode) : "atLeast");
     const newCats: Category[] = state.cats.map((c) => {
       const mode = safeMode(c.mode);
       const { value, valueMax } = sanitizeBounds(mode, c.value, c.valueMax);
@@ -471,20 +513,42 @@ function HypergeometricCalculator() {
         valueMax,
         include: !!c.include,
         cardKey: typeof c.cardKey === "string" && c.cardKey ? normalizeCardName(c.cardKey) : undefined,
-
       };
     });
-    const newCombos: Combo[] = state.combos.map((cb) => ({
-      id: nextComboId(),
-      name: cb.name,
-      entries: cb.entries
-        .filter((e) => e.catIdx >= 0 && e.catIdx < newCats.length)
-        .map((e): ComboEntry => {
-          const mode = safeMode(e.mode);
-          const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
-          return { categoryId: newCats[e.catIdx].id, mode, value, valueMax };
-        }),
-    }));
+    const newCombos: Combo[] = state.combos.map((cb) => {
+      let clauses: ComboClause[] = [];
+      if (cb.clauses && cb.clauses.length > 0) {
+        clauses = cb.clauses.map((cl) => ({
+          id: nextClauseId(),
+          operator: cl.operator === "and" ? "and" : "or",
+          entries: cl.entries
+            .filter((e) => e.catIdx >= 0 && e.catIdx < newCats.length)
+            .map((e): ComboEntry => {
+              const mode = safeMode(e.mode);
+              const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+              return { categoryId: newCats[e.catIdx].id, mode, value, valueMax };
+            }),
+        }));
+      } else if (cb.entries && cb.entries.length > 0) {
+        clauses = cb.entries
+          .filter((e) => e.catIdx >= 0 && e.catIdx < newCats.length)
+          .map((e): ComboClause => {
+            const mode = safeMode(e.mode);
+            const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+            return {
+              id: nextClauseId(),
+              operator: "or",
+              entries: [{ categoryId: newCats[e.catIdx].id, mode, value, valueMax }],
+            };
+          });
+      }
+      return {
+        id: nextComboId(),
+        name: cb.name,
+        operator: cb.operator === "or" ? "or" : "and",
+        clauses,
+      };
+    });
     // Turns must be restored BEFORE categories/combos so the first computation
     // of `hands` (and therefore every probability) already uses the shared value.
     setTurns(sanitizeTurns(state.turns, 2));
@@ -684,10 +748,19 @@ function HypergeometricCalculator() {
       return next;
     });
     setCombos((prev) =>
-      prev.map((cb) => ({
-        ...cb,
-        entries: cb.entries.filter((e) => e.categoryId !== id),
-      })),
+      prev.map((cb) => {
+        const clauses = getComboClauses(cb)
+          .map((cl) => ({
+            ...cl,
+            entries: cl.entries.filter((e) => e.categoryId !== id),
+          }))
+          .filter((cl) => cl.entries.length > 0);
+        return {
+          ...cb,
+          clauses,
+          entries: undefined,
+        };
+      }),
     );
   };
 
@@ -738,6 +811,7 @@ function HypergeometricCalculator() {
   const probFor = (
     handSize: number,
     specs: { ids: string[]; min: number; max?: number }[],
+    groupOperator: "and" | "or" = "and",
   ) => {
     const buckets: CategoryConstraint[] = categories.map((c) => ({
       size: effectiveCount(c),
@@ -749,7 +823,7 @@ function HypergeometricCalculator() {
       min: s.min,
       max: s.max,
     }));
-    return multivariateProbability(deckSize, handSize, buckets, groups);
+    return multivariateProbability(deckSize, handSize, buckets, groups, groupOperator);
   };
 
   const catSpec = (c: Category) => {
@@ -835,55 +909,129 @@ function HypergeometricCalculator() {
   });
 
   const comboResults = combos.map((combo) => {
+    const clauses = getComboClauses(combo);
+    const topOp = combo.operator ?? "and";
+
     const valid =
-      combo.entries.length > 0 &&
-      combo.entries.every((e) => {
-        const cat = categories.find((c) => c.id === e.categoryId);
-        if (!cat) return false;
-        const size = groupSize(cat);
-        if (e.value < 0) return false;
-        if (e.mode !== "atMost" && e.value > size) return false;
-        if (e.mode === "between") {
-          const hi = e.valueMax ?? e.value;
-          if (hi < e.value) return false;
-          if (hi > size) return false;
-        }
-        return true;
-      });
+      clauses.length > 0 &&
+      clauses.every(
+        (cl) =>
+          cl.entries.length > 0 &&
+          cl.entries.every((e) => {
+            const cat = categories.find((c) => c.id === e.categoryId);
+            if (!cat) return false;
+            const size = groupSize(cat);
+            if (e.value < 0) return false;
+            if (e.mode !== "atMost" && e.value > size) return false;
+            if (e.mode === "between") {
+              const hi = e.valueMax ?? e.value;
+              if (hi < e.value) return false;
+              if (hi > size) return false;
+            }
+            return true;
+          }),
+      );
+
     const byTurn = hands.map(({ turn, size: hs }) => {
       if (!valid)
         return { turn, handSize: hs, res: null as ReturnType<typeof multivariateProbability> | null };
-      // Minimum forced picks (atLeast/exactly/between) sum
-      const forcedMin = combo.entries.reduce(
-        (s, e) => s + forcedMinValue(e.mode, e.value),
-        0,
-      );
-      if (forcedMin > hs) return { turn, handSize: hs, res: null };
-      const specs = combo.entries.flatMap((e) => {
-        const cat = categories.find((c) => c.id === e.categoryId);
-        if (!cat) return [];
-        const { min, max } = entryToConstraint(e, groupSize(cat));
-        return [{ ids: memberIds(cat), min, max }];
-      });
-      return { turn, handSize: hs, res: probFor(hs, specs) };
+
+      const clauseFeasible = (cl: ComboClause) => {
+        const clOp = cl.operator ?? "or";
+        if (clOp === "or") {
+          return cl.entries.some((e) => forcedMinValue(e.mode, e.value) <= hs);
+        } else {
+          const sum = cl.entries.reduce((s, e) => s + forcedMinValue(e.mode, e.value), 0);
+          return sum <= hs;
+        }
+      };
+
+      if (topOp === "and") {
+        if (!clauses.every(clauseFeasible)) return { turn, handSize: hs, res: null };
+      } else {
+        if (!clauses.some(clauseFeasible)) return { turn, handSize: hs, res: null };
+      }
+
+      const index = new Map(categories.map((c, i) => [c.id, i]));
+      const groupClauses = clauses.map((cl) => ({
+        operator: cl.operator ?? "or",
+        constraints: cl.entries.map((e) => {
+          const cat = categories.find((c) => c.id === e.categoryId)!;
+          const { min, max } = entryToConstraint(e, groupSize(cat));
+          const catBucketIds = memberIds(cat);
+          return {
+            members: catBucketIds.map((id) => index.get(id)).filter((i): i is number => i !== undefined),
+            min,
+            max,
+          };
+        }),
+      }));
+
+      const buckets: CategoryConstraint[] = categories.map((c) => ({
+        size: effectiveCount(c),
+        min: 0,
+      }));
+
+      const res = multivariateProbability(deckSize, hs, buckets, groupClauses, topOp);
+      return { turn, handSize: hs, res };
     });
+
     return { combo, valid, byTurn };
   });
 
+  const describeCombo = (combo: Combo): string => {
+    const clauses = getComboClauses(combo);
+    if (clauses.length === 0) return "";
+    const topOp = combo.operator ?? "and";
+    const topSep = topOp === "or" ? ` ${t("combo_op_or_short")} ` : " + ";
 
-  const addCombo = () =>
+    return clauses
+      .map((cl) => {
+        const clOp = cl.operator ?? "or";
+        const clSep = clOp === "or" ? ` ${t("combo_op_or_short")} ` : " + ";
+        const inner = cl.entries
+          .map((e) => {
+            const cat = categories.find((c) => c.id === e.categoryId);
+            return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
+          })
+          .join(clSep);
+        return cl.entries.length > 1 ? `(${inner})` : inner;
+      })
+      .join(topSep);
+  };
+
+  const addCombo = () => {
+    const first = categories[0];
+    const second = categories[1] ?? first;
     setCombos((prev) => [
       ...prev,
       {
         id: nextComboId(),
         name: `Combo ${prev.length + 1}`,
-        entries: categories.slice(0, 2).map((c) => ({
-          categoryId: c.id,
-          mode: "atLeast" as Mode,
-          value: 1,
-        })),
+        operator: "and",
+        clauses: [
+          ...(first
+            ? [
+                {
+                  id: nextClauseId(),
+                  operator: "or" as const,
+                  entries: [{ categoryId: first.id, mode: "atLeast" as Mode, value: 1 }],
+                },
+              ]
+            : []),
+          ...(second && second !== first
+            ? [
+                {
+                  id: nextClauseId(),
+                  operator: "or" as const,
+                  entries: [{ categoryId: second.id, mode: "atLeast" as Mode, value: 1 }],
+                },
+              ]
+            : []),
+        ],
       },
     ]);
+  };
   const updateCombo = (id: string, patch: Partial<Combo>) =>
     setCombos((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const removeCombo = (id: string) => setCombos((prev) => prev.filter((c) => c.id !== id));
@@ -918,12 +1066,7 @@ function HypergeometricCalculator() {
       pushRow(
         cr.combo.name,
         "Combo",
-        cr.combo.entries
-          .map((e) => {
-            const cat = categories.find((c) => c.id === e.categoryId);
-            return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
-          })
-          .join(" + "),
+        describeCombo(cr.combo),
         cr.byTurn.map((bt) => ({ turn: bt.turn, res: cr.valid ? bt.res : null })),
       );
     return rows;
@@ -958,15 +1101,22 @@ function HypergeometricCalculator() {
     const catById = new Map(categories.map((c) => [c.id, c]));
     const p: Preset = {
       name,
-      combos: combos.map((cb) => ({
-        name: cb.name,
-        entries: cb.entries.map((e) => ({
-          catName: catById.get(e.categoryId)?.name ?? "?",
-          mode: e.mode,
-          value: e.value,
-          valueMax: e.valueMax,
-        })),
-      })),
+      combos: combos.map((cb) => {
+        const clauses = getComboClauses(cb);
+        return {
+          name: cb.name,
+          operator: cb.operator ?? "and",
+          clauses: clauses.map((cl) => ({
+            operator: cl.operator ?? "or",
+            entries: cl.entries.map((e) => ({
+              catName: catById.get(e.categoryId)?.name ?? "?",
+              mode: e.mode,
+              value: e.value,
+              valueMax: e.valueMax,
+            })),
+          })),
+        };
+      }),
     };
     const filtered = presets.filter((x) => x.name !== name);
     persistPresets([...filtered, p]);
@@ -977,28 +1127,54 @@ function HypergeometricCalculator() {
     const p = presets.find((x) => x.name === name);
     if (!p) return;
     const byName = new Map(categories.map((c) => [c.name.toLowerCase(), c]));
-    const loaded: Combo[] = p.combos.map((cb) => ({
-      id: nextComboId(),
-      name: cb.name,
-      entries: cb.entries
-        .map((e): ComboEntry | null => {
-          const cat = byName.get(e.catName.toLowerCase());
-          if (!cat) return null;
-          const mode: Mode =
-            e.mode === "exactly" || e.mode === "atMost" || e.mode === "between" ? e.mode : "atLeast";
-          const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
-          const out: ComboEntry = { categoryId: cat.id, mode, value };
-          if (valueMax !== undefined) out.valueMax = valueMax;
-          return out;
-        })
-        .filter((v): v is ComboEntry => v !== null),
-
-    }));
+    let missing = 0;
+    const loaded: Combo[] = p.combos.map((cb) => {
+      let clauses: ComboClause[] = [];
+      if (cb.clauses && cb.clauses.length > 0) {
+        clauses = cb.clauses.map((cl) => ({
+          id: nextClauseId(),
+          operator: cl.operator === "and" ? "and" : "or",
+          entries: cl.entries
+            .map((e): ComboEntry | null => {
+              const cat = byName.get(e.catName.toLowerCase());
+              if (!cat) {
+                missing++;
+                return null;
+              }
+              const mode = safeMode(e.mode);
+              const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+              const out: ComboEntry = { categoryId: cat.id, mode, value };
+              if (valueMax !== undefined) out.valueMax = valueMax;
+              return out;
+            })
+            .filter((v): v is ComboEntry => v !== null),
+        }));
+      } else if (cb.entries && cb.entries.length > 0) {
+        clauses = cb.entries
+          .map((e): ComboClause | null => {
+            const cat = byName.get(e.catName.toLowerCase());
+            if (!cat) {
+              missing++;
+              return null;
+            }
+            const mode = safeMode(e.mode);
+            const { value, valueMax } = sanitizeBounds(mode, e.value, e.valueMax);
+            return {
+              id: nextClauseId(),
+              operator: "or",
+              entries: [{ categoryId: cat.id, mode, value, valueMax }],
+            };
+          })
+          .filter((v): v is ComboClause => v !== null);
+      }
+      return {
+        id: nextComboId(),
+        name: cb.name,
+        operator: cb.operator === "or" ? "or" : "and",
+        clauses,
+      };
+    });
     setCombos(loaded);
-    const missing = p.combos.reduce(
-      (s, cb) => s + cb.entries.filter((e) => !byName.has(e.catName.toLowerCase())).length,
-      0,
-    );
     if (missing > 0) {
       toast.warning(t("preset_loaded_missing", { name, n: missing }));
     } else {
@@ -1110,8 +1286,44 @@ function HypergeometricCalculator() {
           }
           entriesOut.push({ catName: e.catName, mode: e.mode as Mode, value: e.value, valueMax });
         });
-        if (entriesOk) combosOut.push({ name: cb.name, entries: entriesOut });
-        else comboOk = false;
+        const op = cb.operator === "or" ? "or" : "and";
+        if (Array.isArray(cb.clauses)) {
+          const clausesOut: PresetClause[] = [];
+          (cb.clauses as unknown[]).forEach((rawCl) => {
+            if (!rawCl || typeof rawCl !== "object") return;
+            const cl = rawCl as Record<string, unknown>;
+            const clOp = cl.operator === "and" ? "and" : "or";
+            if (!Array.isArray(cl.entries)) return;
+            const entriesOut: PresetClause["entries"] = [];
+            (cl.entries as unknown[]).forEach((rawE) => {
+              if (!rawE || typeof rawE !== "object") return;
+              const e = rawE as Record<string, unknown>;
+              if (typeof e.catName !== "string") return;
+              const mode = safeMode(e.mode);
+              const { value, valueMax } = sanitizeBounds(mode, Number(e.value) || 0, typeof e.valueMax === "number" ? e.valueMax : undefined);
+              entriesOut.push({ catName: e.catName, mode, value, valueMax });
+            });
+            if (entriesOut.length > 0) {
+              clausesOut.push({ operator: clOp, entries: entriesOut });
+            }
+          });
+          if (clausesOut.length > 0) {
+            combosOut.push({ name: cb.name, operator: op, clauses: clausesOut });
+          }
+        } else if (Array.isArray(cb.entries)) {
+          const entriesOut: PresetClause["entries"] = [];
+          (cb.entries as unknown[]).forEach((rawE) => {
+            if (!rawE || typeof rawE !== "object") return;
+            const e = rawE as Record<string, unknown>;
+            if (typeof e.catName !== "string") return;
+            const mode = safeMode(e.mode);
+            const { value, valueMax } = sanitizeBounds(mode, Number(e.value) || 0, typeof e.valueMax === "number" ? e.valueMax : undefined);
+            entriesOut.push({ catName: e.catName, mode, value, valueMax });
+          });
+          if (entriesOut.length > 0) {
+            combosOut.push({ name: cb.name, operator: op, entries: entriesOut });
+          }
+        }
       });
       if (comboOk) valid.push({ name: p.name, combos: combosOut });
     });
@@ -1150,11 +1362,15 @@ function HypergeometricCalculator() {
 
       combos: combos.map((cb) => ({
         name: cb.name,
-        entries: cb.entries.map((e) => ({
-          catIdx: categories.findIndex((c) => c.id === e.categoryId),
-          mode: e.mode,
-          value: e.value,
-          valueMax: e.valueMax,
+        operator: cb.operator ?? "and",
+        clauses: getComboClauses(cb).map((cl) => ({
+          operator: cl.operator ?? "or",
+          entries: cl.entries.map((e) => ({
+            catIdx: categories.findIndex((c) => c.id === e.categoryId),
+            mode: e.mode,
+            value: e.value,
+            valueMax: e.valueMax,
+          })),
         })),
       })),
       presets,
@@ -2126,121 +2342,268 @@ function HypergeometricCalculator() {
               {combos.length === 0 && (
                 <p className="text-xs text-muted-foreground">{t("no_combos")}</p>
               )}
-              {combos.map((combo) => (
-                <div key={combo.id} className="p-3 rounded-lg border border-border bg-surface/60 space-y-2">
-                  <div className="flex items-center gap-2">
+              {combos.map((combo) => {
+                const clauses = getComboClauses(combo);
+                return (
+                <div key={combo.id} className="p-3 rounded-lg border border-border bg-surface/60 space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Input
                       value={combo.name}
                       onChange={(e) => updateCombo(combo.id, { name: e.target.value })}
-                      className="h-8 font-medium"
+                      className="h-8 font-medium flex-1 min-w-[120px]"
                     />
-                    <Button size="icon" variant="ghost" onClick={() => removeCombo(combo.id)} className="h-8 w-8 shrink-0">
+                    <Select
+                      value={combo.operator ?? "and"}
+                      onValueChange={(v) =>
+                        updateCombo(combo.id, { operator: v as "and" | "or" })
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-[165px] text-xs font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="and">{t("combo_op_and")}</SelectItem>
+                        <SelectItem value="or">{t("combo_op_or")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => removeCombo(combo.id)}
+                      className="h-8 w-8 shrink-0"
+                      aria-label={t("remove_combo")}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
-                  <div className="space-y-1.5">
-                    {combo.entries.map((entry, i) => (
-                      <div key={i} className="flex items-center gap-1.5">
-                        <Select
-                          value={entry.categoryId}
-                          onValueChange={(v) => {
-                            const entries = [...combo.entries];
-                            entries[i] = { ...entry, categoryId: v };
-                            updateCombo(combo.id, { entries });
-                          }}
-                        >
-                          <SelectTrigger className="h-8 flex-1 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.cardKey ? `★ ${c.name}` : c.name}
-                              </SelectItem>
+
+                  <div className="space-y-3">
+                    {clauses.map((clause, clIdx) => (
+                      <div key={clause.id} className="space-y-2">
+                        {clIdx > 0 && (
+                          <div className="flex items-center gap-2 my-1">
+                            <div className="flex-1 border-t border-border/60" />
+                            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-gold/15 text-gold border border-gold/40">
+                              {combo.operator === "or" ? t("combo_op_or_short") : t("combo_op_and_short")}
+                            </span>
+                            <div className="flex-1 border-t border-border/60" />
+                          </div>
+                        )}
+
+                        <div className="p-2.5 rounded-md border border-border/70 bg-background/50 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            {clause.entries.length > 1 ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] text-muted-foreground font-medium">
+                                  {t("combo_operator")}:
+                                </span>
+                                <Select
+                                  value={clause.operator ?? "or"}
+                                  onValueChange={(v) => {
+                                    const nextClauses = clauses.map((c, idx) =>
+                                      idx === clIdx ? { ...c, operator: v as "and" | "or" } : c
+                                    );
+                                    updateCombo(combo.id, { clauses: nextClauses });
+                                  }}
+                                >
+                                  <SelectTrigger className="h-6 w-[125px] text-[10px] font-medium">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="or">{t("clause_op_or")}</SelectItem>
+                                    <SelectItem value="and">{t("clause_op_and")}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <div />
+                            )}
+                            {clauses.length > 1 && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive ml-auto"
+                                title={t("remove_clause")}
+                                aria-label={t("remove_clause")}
+                                onClick={() => {
+                                  const nextClauses = clauses.filter((_, idx) => idx !== clIdx);
+                                  updateCombo(combo.id, { clauses: nextClauses });
+                                }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {clause.entries.map((entry, eIdx) => (
+                              <div key={eIdx} className="space-y-1.5">
+                                {eIdx > 0 && (
+                                  <div className="flex items-center gap-2 px-1">
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-muted/80 text-muted-foreground">
+                                      {clause.operator === "and" ? t("combo_op_and_short") : t("combo_op_or_short")}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1.5">
+                                  <Select
+                                    value={entry.categoryId}
+                                    onValueChange={(v) => {
+                                      const nextClauses = clauses.map((c, cIndex) => {
+                                        if (cIndex !== clIdx) return c;
+                                        const entries = [...c.entries];
+                                        entries[eIdx] = { ...entry, categoryId: v };
+                                        return { ...c, entries };
+                                      });
+                                      updateCombo(combo.id, { clauses: nextClauses });
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 flex-1 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {categories.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>
+                                          {c.cardKey ? `★ ${c.name}` : c.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Select
+                                    value={entry.mode}
+                                    onValueChange={(v) => {
+                                      const nextClauses = clauses.map((c, cIndex) => {
+                                        if (cIndex !== clIdx) return c;
+                                        const entries = [...c.entries];
+                                        const nextMode = v as Mode;
+                                        const next: ComboEntry = { ...entry, mode: nextMode };
+                                        if (nextMode === "between" && (next.valueMax === undefined || next.valueMax < next.value)) {
+                                          next.valueMax = next.value;
+                                        }
+                                        entries[eIdx] = next;
+                                        return { ...c, entries };
+                                      });
+                                      updateCombo(combo.id, { clauses: nextClauses });
+                                    }}
+                                  >
+                                    <SelectTrigger className="h-8 w-[80px] text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="atLeast">≥</SelectItem>
+                                      <SelectItem value="exactly">=</SelectItem>
+                                      <SelectItem value="atMost">≤</SelectItem>
+                                      <SelectItem value="between">≥ ≤</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={maxHandSize}
+                                    value={entry.value}
+                                    onChange={(e) => {
+                                      const nextClauses = clauses.map((c, cIndex) => {
+                                        if (cIndex !== clIdx) return c;
+                                        const entries = [...c.entries];
+                                        entries[eIdx] = { ...entry, value: Math.max(0, Number(e.target.value) || 0) };
+                                        return { ...c, entries };
+                                      });
+                                      updateCombo(combo.id, { clauses: nextClauses });
+                                    }}
+                                    className="h-8 w-14 text-center"
+                                  />
+                                  {entry.mode === "between" && (
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={maxHandSize}
+                                      value={entry.valueMax ?? entry.value}
+                                      onChange={(e) => {
+                                        const nextClauses = clauses.map((c, cIndex) => {
+                                          if (cIndex !== clIdx) return c;
+                                          const entries = [...c.entries];
+                                          entries[eIdx] = { ...entry, valueMax: Math.max(0, Number(e.target.value) || 0) };
+                                          return { ...c, entries };
+                                        });
+                                        updateCombo(combo.id, { clauses: nextClauses });
+                                      }}
+                                      className="h-8 w-14 text-center"
+                                    />
+                                  )}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 shrink-0"
+                                    onClick={() => {
+                                      if (clause.entries.length > 1) {
+                                        const nextClauses = clauses.map((c, cIndex) => {
+                                          if (cIndex !== clIdx) return c;
+                                          return { ...c, entries: c.entries.filter((_, j) => j !== eIdx) };
+                                        });
+                                        updateCombo(combo.id, { clauses: nextClauses });
+                                      } else {
+                                        const nextClauses = clauses.filter((_, cIndex) => cIndex !== clIdx);
+                                        updateCombo(combo.id, { clauses: nextClauses });
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
                             ))}
 
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={entry.mode}
-                          onValueChange={(v) => {
-                            const entries = [...combo.entries];
-                            const nextMode = v as Mode;
-                            const next: ComboEntry = { ...entry, mode: nextMode };
-                            if (nextMode === "between" && (next.valueMax === undefined || next.valueMax < next.value)) {
-                              next.valueMax = next.value;
-                            }
-                            entries[i] = next;
-                            updateCombo(combo.id, { entries });
-                          }}
-                        >
-                          <SelectTrigger className="h-8 w-[80px] text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="atLeast">≥</SelectItem>
-                            <SelectItem value="exactly">=</SelectItem>
-                            <SelectItem value="atMost">≤</SelectItem>
-                            <SelectItem value="between">≥ ≤</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={maxHandSize}
-                          value={entry.value}
-                          onChange={(e) => {
-                            const entries = [...combo.entries];
-                            entries[i] = { ...entry, value: Math.max(0, Number(e.target.value) || 0) };
-                            updateCombo(combo.id, { entries });
-                          }}
-                          className="h-8 w-14"
-                        />
-                        {entry.mode === "between" && (
-                          <Input
-                            type="number"
-                            min={0}
-                            max={maxHandSize}
-                            value={entry.valueMax ?? entry.value}
-                            onChange={(e) => {
-                              const entries = [...combo.entries];
-                              entries[i] = { ...entry, valueMax: Math.max(0, Number(e.target.value) || 0) };
-                              updateCombo(combo.id, { entries });
-                            }}
-                            className="h-8 w-14"
-                          />
-                        )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() => {
-                            const entries = combo.entries.filter((_, j) => j !== i);
-                            updateCombo(combo.id, { entries });
-                          }}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1 h-6 text-xs text-gold hover:text-gold hover:bg-gold/10 px-2"
+                              disabled={categories.length === 0}
+                              onClick={() => {
+                                const first = categories[0];
+                                if (!first) return;
+                                const nextClauses = clauses.map((c, cIndex) => {
+                                  if (cIndex !== clIdx) return c;
+                                  return {
+                                    ...c,
+                                    entries: [...c.entries, { categoryId: first.id, mode: "atLeast" as Mode, value: 1 }],
+                                  };
+                                });
+                                updateCombo(combo.id, { clauses: nextClauses });
+                              }}
+                            >
+                              <Plus className="w-3 h-3" /> {t("add_alternative")}
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     ))}
+
                     <Button
                       size="sm"
                       variant="outline"
-                      className="gap-1 h-7"
+                      className="gap-1 h-7 text-xs w-full justify-center"
                       disabled={categories.length === 0}
                       onClick={() => {
                         const first = categories[0];
                         if (!first) return;
                         updateCombo(combo.id, {
-                          entries: [...combo.entries, { categoryId: first.id, mode: "atLeast", value: 1 }],
+                          clauses: [
+                            ...clauses,
+                            {
+                              id: nextClauseId(),
+                              operator: "or",
+                              entries: [{ categoryId: first.id, mode: "atLeast", value: 1 }],
+                            },
+                          ],
                         });
                       }}
                     >
-                      <Plus className="w-3 h-3" /> {t("add_category")}
+                      <Plus className="w-3 h-3" /> {t("add_clause")}
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -2410,12 +2773,7 @@ function HypergeometricCalculator() {
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-sm">{combo.name}</span>
                           <span className="text-[10px] text-muted-foreground">
-                            {combo.entries
-                              .map((e) => {
-                                const cat = categories.find((c) => c.id === e.categoryId);
-                                return `${describeConstraint(e.mode, e.value, e.valueMax)} ${cat?.name ?? "?"}`;
-                              })
-                              .join(" + ")}
+                            {describeCombo(combo)}
                           </span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">

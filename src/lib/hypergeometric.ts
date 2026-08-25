@@ -30,18 +30,24 @@ export interface GroupConstraint {
   max?: number;
 }
 
+export interface GroupClause {
+  operator?: "and" | "or";
+  constraints: GroupConstraint[];
+}
+
 /**
  * Probability that a random hand of `handSize` drawn from a deck of `deckSize`
  * satisfies all category constraints simultaneously (multivariate hypergeometric).
  * Categories are disjoint; any remaining cards are treated as "other".
- * Optional `groups` add constraints over unions of categories.
+ * Optional `groups` add constraints over unions of categories (or compound clauses).
  * Returns { numerator, denominator, probability }.
  */
 export function multivariateProbability(
   deckSize: number,
   handSize: number,
   categories: CategoryConstraint[],
-  groups: GroupConstraint[] = [],
+  groups: (GroupConstraint | GroupClause)[] = [],
+  groupOperator: "and" | "or" = "and",
 ): { numerator: bigint; denominator: bigint; probability: number } {
   const totalCategorized = categories.reduce((s, c) => s + c.size, 0);
   const otherSize = deckSize - totalCategorized;
@@ -53,11 +59,32 @@ export function multivariateProbability(
   let numerator = 0n;
   const picks: number[] = new Array(categories.length).fill(0);
 
-  const groupsOk = () =>
-    groups.every((g) => {
-      const total = g.members.reduce((s, i) => s + (picks[i] ?? 0), 0);
-      return total >= g.min && (g.max === undefined || total <= g.max);
-    });
+  const evalClause = (item: GroupConstraint | GroupClause): boolean => {
+    if ("constraints" in item) {
+      const op = item.operator ?? "or";
+      if (item.constraints.length === 0) return true;
+      if (op === "or") {
+        return item.constraints.some((g) => {
+          const total = g.members.reduce((s, i) => s + (picks[i] ?? 0), 0);
+          return total >= g.min && (g.max === undefined || total <= g.max);
+        });
+      }
+      return item.constraints.every((g) => {
+        const total = g.members.reduce((s, i) => s + (picks[i] ?? 0), 0);
+        return total >= g.min && (g.max === undefined || total <= g.max);
+      });
+    }
+    const total = item.members.reduce((s, i) => s + (picks[i] ?? 0), 0);
+    return total >= item.min && (item.max === undefined || total <= item.max);
+  };
+
+  const groupsOk = () => {
+    if (groups.length === 0) return true;
+    if (groupOperator === "or") {
+      return groups.some(evalClause);
+    }
+    return groups.every(evalClause);
+  };
 
   // Recurse over each category picking a valid count.
   function recurse(idx: number, remaining: number, product: bigint) {
