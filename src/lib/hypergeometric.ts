@@ -20,15 +20,28 @@ export interface CategoryConstraint {
 }
 
 /**
+ * Constraint over the union of several categories (indexes into the categories
+ * array). Lets a "Starters" bucket and a highlighted card carved out of it be
+ * counted together while still being disjoint buckets in the math.
+ */
+export interface GroupConstraint {
+  members: number[];
+  min: number;
+  max?: number;
+}
+
+/**
  * Probability that a random hand of `handSize` drawn from a deck of `deckSize`
  * satisfies all category constraints simultaneously (multivariate hypergeometric).
  * Categories are disjoint; any remaining cards are treated as "other".
+ * Optional `groups` add constraints over unions of categories.
  * Returns { numerator, denominator, probability }.
  */
 export function multivariateProbability(
   deckSize: number,
   handSize: number,
   categories: CategoryConstraint[],
+  groups: GroupConstraint[] = [],
 ): { numerator: bigint; denominator: bigint; probability: number } {
   const totalCategorized = categories.reduce((s, c) => s + c.size, 0);
   const otherSize = deckSize - totalCategorized;
@@ -38,11 +51,19 @@ export function multivariateProbability(
   }
 
   let numerator = 0n;
+  const picks: number[] = new Array(categories.length).fill(0);
+
+  const groupsOk = () =>
+    groups.every((g) => {
+      const total = g.members.reduce((s, i) => s + (picks[i] ?? 0), 0);
+      return total >= g.min && (g.max === undefined || total <= g.max);
+    });
 
   // Recurse over each category picking a valid count.
   function recurse(idx: number, remaining: number, product: bigint) {
     if (idx === categories.length) {
       if (remaining < 0 || remaining > otherSize) return;
+      if (!groupsOk()) return;
       numerator += product * combinations(otherSize, remaining);
       return;
     }
@@ -50,8 +71,10 @@ export function multivariateProbability(
     const lo = Math.max(c.min, 0);
     const hi = Math.min(c.max ?? c.size, c.size, remaining);
     for (let k = lo; k <= hi; k++) {
+      picks[idx] = k;
       recurse(idx + 1, remaining - k, product * combinations(c.size, k));
     }
+    picks[idx] = 0;
   }
   recurse(0, handSize, 1n);
 
@@ -59,6 +82,7 @@ export function multivariateProbability(
   const probability = bigDiv(numerator, denom);
   return { numerator, denominator: denom, probability };
 }
+
 
 function bigDiv(a: bigint, b: bigint): number {
   if (b === 0n) return 0;
