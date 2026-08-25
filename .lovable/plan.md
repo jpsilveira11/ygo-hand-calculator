@@ -1,65 +1,33 @@
-## Objetivo
+# Estrela alternável e categoria sempre editável
 
-1. Ao importar `.ydk` ou `ydke://`, mostrar os **nomes reais** das cartas em vez de "Card #12345".
-2. Aceitar **URLs de decks do MasterDuelMeta e DuelLinksMeta** como fonte de importação.
-3. Esclarecer o suporte a "links internos" do Master Duel / Duel Links.
+Duas melhorias na lista de cartas importadas (seção "Cartas do main deck").
 
-## 1. Resolver IDs → nomes de carta
+## 1. Estrela que liga e desliga
 
-Vou usar a API pública gratuita do **YGOPRODeck** (`https://db.ygoprodeck.com/api/v7/cardinfo.php?id=1,2,3`) para traduzir IDs em nomes. Ela retorna também tipo/atributo/imagem, mas nesse primeiro passo só uso o nome.
+Hoje, quando uma carta é destacada, a estrela desaparece e é substituída por um selo "★ Destaque" fixo — só é possível remover o destaque na seção "Cartas em destaque", pelo ícone de lixeira.
 
-- **Onde chamar:** em um `createServerFn` (`src/lib/cards.functions.ts`) — evita CORS e permite cachear.
-- **Cache em memória** dentro do módulo do server function: `Map<string, string>` (id → nome). Persiste enquanto o worker vive.
-- **Batching:** a API aceita várias IDs por vírgula; o server function agrupa todas as IDs desconhecidas em uma única requisição.
-- **Fallback:** se a API falhar ou algum ID não for encontrado, mantém "Card #ID" e mostra um toast informando que X cartas não puderam ser resolvidas.
-- **Fluxo no cliente:** logo depois de `parseYdk` / `parseYdkeUrl`, chamo `resolveCardNames(ids)` e substituo `name` nas entradas antes de setar `parsedCards`.
+Passará a funcionar como um botão de alternância:
+- Carta sem destaque: estrela vazia, clique adiciona o destaque (como hoje).
+- Carta com destaque: estrela preenchida em dourado, clique remove o destaque daquela carta.
+- Tooltip/aria-label muda entre "Destacar carta" e "Remover destaque", nos três idiomas.
+- Ao remover, a categoria de destaque correspondente é apagada e as cópias voltam a contar integralmente na categoria de origem; qualquer combo que usasse aquela carta em destaque tem essa referência removida (mesmo comportamento seguro já usado pela lixeira).
 
-O `.ydk` e o `ydke://` só carregam IDs numéricos do Konami — não há como resolver nomes sem consultar um banco externo, então essa é a única rota viável.
+## 2. Categoria editável mesmo com estrela
 
-## 2. Importação por URL de meta sites
+Hoje o seletor de categoria fica desabilitado quando a carta está destacada.
 
-**MasterDuelMeta e DuelLinksMeta expõem endpoints públicos** (o próprio site consome), no formato:
+Passará a ficar sempre habilitado. Trocar a categoria de uma carta destacada:
+- atualiza a atribuição da carta, e
+- atualiza a categoria-mãe do destaque, para que a carta continue somando dentro do grupo correto (ex.: mover "Snake-Eye Ash" de Starters para Extenders faz "pelo menos 1 extender" incluir o Ash).
+- Escolher "Sem categoria" deixa o destaque sem mãe: ele conta apenas como condição própria.
 
-- `https://www.masterduelmeta.com/api/v1/decks?url=<slug-do-deck>`
-- `https://www.duellinksmeta.com/api/v1/top-decks?url=<slug-do-deck>` (o path exato varia entre "decks" e "top-decks"; o server function tenta ambos)
-
-O JSON retorna `main`, `extra`, `side` como arrays de `{ card: { name, konamiID }, amount }`.
-
-- **Novo server function** `importFromMetaUrl(url: string)` em `src/lib/deck-import.functions.ts`:
-  1. Detecta o host (`masterduelmeta.com` ou `duellinksmeta.com`) e extrai o slug do path.
-  2. Faz o `fetch` do endpoint correspondente com `User-Agent` de navegador.
-  3. Normaliza o retorno para o mesmo `ParsedDeck` que os outros parsers.
-  4. Se o formato do site mudar / retornar erro, devolve `{ error }` legível.
-- **Nova aba na UI de importação:** ao lado de "Colar / ydke:// / .ydk", uma aba **"Link (Meta)"** com um input de URL e botão Importar. Sugere o formato correto do formato ativo (Master → MDM, Speed/Rush Duel Links → DLM).
-- **Detecção automática de formato:** se o deck vier do MasterDuelMeta e tiver 40+ cartas, define formato Master; se vier do DuelLinksMeta, define Speed (ou Rush conforme tamanho).
-
-**Restrições conhecidas** (vou registrar como toast/hint se acontecer):
-- O CORS impede chamar direto do browser — por isso o server function.
-- Alguns decks podem estar por trás de páginas dinâmicas; quando o endpoint direto não devolver JSON, o server function volta para scraping simples do HTML (regex sobre `<script>` embutido do Next.js) como fallback. Se ainda assim falhar, mostra erro claro pedindo para colar a decklist.
-
-## 3. Links "internos" do Master Duel / Duel Links
-
-Aqui preciso ser franco: **Master Duel e Duel Links não geram URLs de deck**. O que existe é o **Deck Share ID / Recipe Code** — um código alfanumérico ("Deck ID") exibido dentro do jogo para copiar/importar entre jogadores, mas não é um link web e a Konami não expõe API pública para resolvê-lo.
-
-Duas alternativas que posso oferecer:
-- **Aceitar o "Deck Share Code" no campo de URL** e tentar resolvê-lo via MasterDuelMeta (que às vezes indexa decks por esse código). Sem garantia de acerto.
-- **Deixar claro na UI** que para decks do jogo o caminho é: abrir o deck no MasterDuelMeta/DuelLinksMeta, copiar a URL, colar aqui — ou usar exportação para `.ydk` de ferramentas como YGOPRODeck.
-
-Vou adotar a segunda opção como padrão (texto de ajuda ao lado da nova aba). Se quiser tentar a primeira, me diga depois do plano aprovado.
+Nada muda nos cálculos de probabilidade em si — a matemática de grupos já existente continua válida, só a categoria-mãe passa a ser reconfigurável.
 
 ## Detalhes técnicos
 
-- **Server functions ficam em arquivos `.functions.ts`** (não `src/server/`), conforme regras do template.
-- **Sem novos pacotes**: uso `fetch` nativo do runtime worker.
-- **Cache:** simples `Map` no módulo do server function; sem persistência entre deploys, mas suficiente para uma sessão de uso.
-- **Arquivos alterados/novos:**
-  - `src/lib/cards.functions.ts` — novo, resolve IDs em nomes.
-  - `src/lib/deck-import.functions.ts` — novo, importa URLs do MDM/DLM.
-  - `src/lib/deck-parser.ts` — pequenos ajustes para expor os IDs originais junto do nome (para o resolver saber o que buscar).
-  - `src/routes/index.tsx` — nova aba "Link (Meta)", chamada assíncrona ao resolver nomes após `.ydk` / `ydke://`, feedback de loading.
+Arquivo: `src/routes/index.tsx`.
 
-## Resultado esperado
-
-- Importar um `.ydk` mostra `3x Ash Blossom & Joyous Spring` em vez de `3x Card #14558127`.
-- Colar `https://www.masterduelmeta.com/deck/<slug>` puxa o main deck completo com nomes.
-- Aviso claro sobre não haver "URL de deck" oficial no cliente do jogo, direcionando para MDM/DLM.
+- Novo helper `removeFocusByKey(key)` reaproveitando a limpeza feita por `removeCategory` (remoção da categoria + limpeza de referências em combos).
+- O bloco da linha ~1677 (`focused ? <Badge/> : <Button/>`) passa a renderizar sempre o `Button` com `Star` preenchida (`fill-gold text-gold`) quando `focused`, chamando `removeFocusByKey`.
+- `Select` de categoria: remover `disabled={!!focused}`; no `onValueChange`, além de `setCardAssignments`, chamar `updateCategory(focused.id, { parentCatId: v === "__none__" ? undefined : v })` quando existir `focused`.
+- `src/lib/i18n.ts`: adicionar chave `focus_remove` (PT/EN/ES).
