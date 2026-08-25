@@ -543,12 +543,30 @@ function HypergeometricCalculator() {
   }, [parsedCards, cardAssignments, focusCats]);
 
   const hasImportedCards = parsedCards.length > 0;
-  const effectiveCount = (c: Category): number =>
-    hasImportedCards ? (derivedCounts[c.id] ?? 0) : c.count;
+  /** Disjoint bucket size: a plain category never includes its highlighted cards. */
+  const effectiveCount = (c: Category): number => {
+    if (hasImportedCards) return derivedCounts[c.id] ?? 0;
+    if (c.cardKey) return c.count;
+    const children = focusCats
+      .filter((f) => f.parentCatId === c.id)
+      .reduce((s, f) => s + f.count, 0);
+    return Math.max(0, c.count - children);
+  };
 
+  /** Ids of every bucket that counts toward this category (itself + highlighted children). */
+  const memberIds = (c: Category): string[] =>
+    c.cardKey ? [c.id] : [c.id, ...focusCats.filter((f) => f.parentCatId === c.id).map((f) => f.id)];
+
+  /** Size of the union: e.g. "Starters" includes the copies of ★ Snake-Eye Ash. */
+  const groupSize = (c: Category): number =>
+    memberIds(c).reduce((s, id) => {
+      const cat = categories.find((x) => x.id === id);
+      return s + (cat ? effectiveCount(cat) : 0);
+    }, 0);
 
   const totalCategorized = categories.reduce((s, c) => s + effectiveCount(c), 0);
   const importedTotal = parsedCards.reduce((s, c) => s + c.quantity, 0);
+
 
   // -------------------- Actions --------------------
 
@@ -707,9 +725,32 @@ function HypergeometricCalculator() {
   const included = categories.filter((c) => c.include);
   const maxHandSize = hands.reduce((m, h) => Math.max(m, h.size), 0);
 
-  const fullConstraints: CategoryConstraint[] = categories.map((c) =>
-    catToConstraint(c, effectiveCount(c)),
-  );
+  /**
+   * Probability helper working on group specs: each spec constrains the union of
+   * the given bucket ids, so a category constraint automatically includes the
+   * highlighted cards carved out of it.
+   */
+  const probFor = (
+    handSize: number,
+    specs: { ids: string[]; min: number; max?: number }[],
+  ) => {
+    const buckets: CategoryConstraint[] = categories.map((c) => ({
+      size: effectiveCount(c),
+      min: 0,
+    }));
+    const index = new Map(categories.map((c, i) => [c.id, i]));
+    const groups = specs.map((s) => ({
+      members: s.ids.map((id) => index.get(id)).filter((i): i is number => i !== undefined),
+      min: s.min,
+      max: s.max,
+    }));
+    return multivariateProbability(deckSize, handSize, buckets, groups);
+  };
+
+  const catSpec = (c: Category) => {
+    const { min, max } = catToConstraint(c, groupSize(c));
+    return { ids: memberIds(c), min, max };
+  };
 
   const validation = useMemo(() => {
     const errors: string[] = [];
@@ -727,7 +768,7 @@ function HypergeometricCalculator() {
       errors.push(t("err_sum_exceeds", { total: totalCategorized, size: deckSize }));
     }
     for (const c of included) {
-      const size = effectiveCount(c);
+      const size = groupSize(c);
       if (c.mode !== "atMost" && c.value > size) {
         errors.push(
           t("err_value_exceeds_size", {
@@ -767,22 +808,22 @@ function HypergeometricCalculator() {
 
   const resultsByTurn = useMemo(() => {
     if (!canCompute) return null;
+    const specs = included.map(catSpec);
     return hands.map(({ turn, size }) => ({
       turn,
       handSize: size,
-      res: multivariateProbability(deckSize, size, fullConstraints),
+      res: probFor(size, specs),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCompute, deckSize, categories, derivedCounts]);
+  }, [canCompute, deckSize, categories, derivedCounts, hands]);
 
   const perCategoryResults = included.map((c) => {
-    const size = effectiveCount(c);
-    const constraint = catToConstraint(c, size);
+    const size = groupSize(c);
+    const spec1 = catSpec(c);
     const byTurn = hands.map(({ turn, size: hs }) => {
       let res: ReturnType<typeof multivariateProbability> | null = null;
-      const feasible =
-        (c.mode === "atMost" || c.value <= size) && c.value <= hs;
-      if (feasible) res = multivariateProbability(deckSize, hs, [constraint]);
+      const feasible = (c.mode === "atMost" || c.value <= size) && c.value <= hs;
+      if (feasible) res = probFor(hs, [spec1]);
       return { turn, handSize: hs, res };
     });
     return { cat: c, size, byTurn };
@@ -794,7 +835,7 @@ function HypergeometricCalculator() {
       combo.entries.every((e) => {
         const cat = categories.find((c) => c.id === e.categoryId);
         if (!cat) return false;
-        const size = effectiveCount(cat);
+        const size = groupSize(cat);
         if (e.value < 0) return false;
         if (e.mode !== "atMost" && e.value > size) return false;
         if (e.mode === "between") {
@@ -813,17 +854,17 @@ function HypergeometricCalculator() {
         0,
       );
       if (forcedMin > hs) return { turn, handSize: hs, res: null };
-      // Build constraints per category; combined entries override defaults.
-      const cs: CategoryConstraint[] = categories.map((cat) => {
-        const size = effectiveCount(cat);
-        const entry = combo.entries.find((e) => e.categoryId === cat.id);
-        if (entry) return entryToConstraint(entry, size);
-        return { size, min: 0 };
+      const specs = combo.entries.flatMap((e) => {
+        const cat = categories.find((c) => c.id === e.categoryId);
+        if (!cat) return [];
+        const { min, max } = entryToConstraint(e, groupSize(cat));
+        return [{ ids: memberIds(cat), min, max }];
       });
-      return { turn, handSize: hs, res: multivariateProbability(deckSize, hs, cs) };
+      return { turn, handSize: hs, res: probFor(hs, specs) };
     });
     return { combo, valid, byTurn };
   });
+
 
   const addCombo = () =>
     setCombos((prev) => [
@@ -1691,7 +1732,8 @@ function HypergeometricCalculator() {
             </CardHeader>
             <CardContent className="space-y-3">
               {plainCats.map((c) => {
-                const count = effectiveCount(c);
+                const count = hasImportedCards ? groupSize(c) : c.count;
+
                 return (
                   <div
                     key={c.id}
@@ -1880,10 +1922,16 @@ function HypergeometricCalculator() {
                       </Button>
                     </div>
                     {parent && (
-                      <p className="text-[11px] text-muted-foreground">
-                        {t("focus_parent")}: {parent.name}
-                      </p>
+                      <>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("focus_parent")}: {parent.name}
+                        </p>
+                        <p className="text-[11px] text-gold">
+                          {t("focus_counts_in", { name: parent.name })}
+                        </p>
+                      </>
                     )}
+
                     <div className={`grid gap-2 ${c.mode === "between" ? "grid-cols-4" : "grid-cols-3"}`}>
                       <div>
                         <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
