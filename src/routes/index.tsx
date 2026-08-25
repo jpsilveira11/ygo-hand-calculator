@@ -2830,8 +2830,28 @@ function HypergeometricCalculator() {
         </div>
       </main>
 
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground">
-        {t("footer")}
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 text-center text-xs text-muted-foreground space-y-2">
+        <p>{t("footer")}</p>
+        <p>
+          {t("footer_made_by")}{" "}
+          <a
+            href="https://github.com/jpsilveira11"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-foreground transition-colors"
+          >
+            @jpsilveira11
+          </a>{" "}
+          &mdash;{" "}
+          <a
+            href="https://github.com/jpsilveira11/ygo-hand-calculator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-foreground transition-colors"
+          >
+            ygo-hand-calculator
+          </a>
+        </p>
       </footer>
     </div>
   );

@@ -135,6 +135,7 @@ const pt: Dict = {
 
   footer:
     "Cálculo baseado na distribuição hipergeométrica multivariada. Yu-Gi-Oh! é marca registrada da Konami.",
+  footer_made_by: "Feito por",
 
   share_copied: "Link copiado para a área de transferência.",
   share_fail: "Não consegui copiar o link.",
@@ -292,6 +293,7 @@ const en: Dict = {
 
   footer:
     "Based on the multivariate hypergeometric distribution. Yu-Gi-Oh! is a registered trademark of Konami.",
+  footer_made_by: "Made by",
 
   share_copied: "Link copied to clipboard.",
   share_fail: "Couldn't copy the link.",
@@ -449,6 +451,7 @@ const es: Dict = {
 
   footer:
     "Cálculo basado en la distribución hipergeométrica multivariada. Yu-Gi-Oh! es marca registrada de Konami.",
+  footer_made_by: "Hecho por",
 
   share_copied: "Enlace copiado al portapapeles.",
   share_fail: "No pude copiar el enlace.",
