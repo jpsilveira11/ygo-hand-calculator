@@ -1921,10 +1921,16 @@ function HypergeometricCalculator() {
                       </Button>
                     </div>
                     {parent && (
-                      <p className="text-[11px] text-muted-foreground">
-                        {t("focus_parent")}: {parent.name}
-                      </p>
+                      <>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("focus_parent")}: {parent.name}
+                        </p>
+                        <p className="text-[11px] text-gold">
+                          {t("focus_counts_in", { name: parent.name })}
+                        </p>
+                      </>
                     )}
+
                     <div className={`grid gap-2 ${c.mode === "between" ? "grid-cols-4" : "grid-cols-3"}`}>
                       <div>
                         <Label className="text-xs text-muted-foreground">{t("in_deck")}</Label>
