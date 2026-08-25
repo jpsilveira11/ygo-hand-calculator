@@ -344,6 +344,7 @@ function HypergeometricCalculator() {
 
   const [parsedCards, setParsedCards] = useState<ParsedCard[]>([]);
   const [cardAssignments, setCardAssignments] = useState<Record<number, string>>({});
+  const [focusManual, setFocusManual] = useState<string>("");
 
   const [pasteText, setPasteText] = useState<string>("");
   const [ydkeUrl, setYdkeUrl] = useState<string>("");
